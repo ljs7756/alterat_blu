@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="profile">
+    <select id="selectProfile" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                p_id,
+                p_name,
+                worker,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate,
+                moddate
+            FROM
+                tb_profile
+            WHERE
+                common = '${common}'
+            ORDER BY regdate desc
+            LIMIT ${off_set}, ${page_count}
+        ]]>
+    </select>
+    
+        <select id="profileList" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                p_id,
+                p_name,
+                worker,
+                bitrate,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate,
+                moddate
+            FROM
+                tb_profile
+            WHERE enable_yn='Y'
+            ORDER BY regdate desc
+
+        ]]>
+    </select>
+    
+            <select id="profileChannel" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT
+            common
+            FROM
+               tb_profile
+            GROUP BY common
+        ]]>
+    </select>
+    
+    
+    <select id="selectProfileDetail" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                p_id,
+                p_name,
+                worker,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate,
+                moddate
+            FROM
+                tb_profile
+            WHERE
+                p_id = #{p_id}
+        ]]>
+    </select>
+    
+    <!-- pooq프로파일리스트 -->
+    <select id="selectProfilePooq" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                p_id,
+                p_name,
+                worker,
+                bitrate,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate,
+                moddate
+            FROM
+                tb_profile
+            WHERE
+                common = 'pooq'
+        ]]>
+    </select>
+    
+    <!-- 추후 MXF 프로파일만 가져갈 수 있도록 수정 -->
+    <select id="selectProfileByWorker" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                p_id,
+                p_name,
+                worker,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate,
+                moddate
+            FROM
+                tb_profile
+            WHERE
+                worker = #{worker}
+            AND
+                enable_yn = #{enable_yn}
+        ]]>
+    </select>
+    
+    
+    <select id="selectProfileByWorker_2" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                p_id,
+                p_name,
+                worker,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate,
+                moddate
+            FROM
+                tb_profile
+            WHERE
+                p_id = #{p_id}
+            AND
+                enable_yn = #{enable_yn}
+        ]]>
+    </select>
+    
+    <select id="selectProfileCountAll" parameterType="hashmap" resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT 
+                count(*) as tb_profile
+            FROM
+                tb_profile
+            WHERE
+                common = #{common}
+        ]]>
+    </select>
+    
+    <select id="selectPID" parameterType="hashmap" resultType="java.lang.String">
+        <![CDATA[
+            SELECT 
+                p_id
+            FROM
+                tb_profile
+            WHERE
+                p_id = (SELECT 
+                        MAX(p_id)
+                    FROM
+                        tb_profile
+                    WHERE
+                        DATE_FORMAT(regdate, '%Y%m%e') = DATE_FORMAT(NOW(), '%Y%m%e'))
+        ]]>
+    </select>
+
+    <insert id="insertProfile" parameterType="hashmap">
+        <![CDATA[
+            INSERT INTO tb_profile (
+                p_id,
+                p_name,
+                worker,
+                bitrate,
+                enable_yn,
+                common,
+                video_enable,
+                video_option,
+                audio_enable,
+                audio_option,
+                regdate)
+            VALUES (
+                #{p_id},
+                #{p_name},
+                #{worker},
+                #{bitrate},
+                #{enable_yn},
+                #{common},
+                #{video_enable},
+                #{video_option},
+                #{audio_enable},
+                #{audio_option},
+               NOW()
+            )
+        ]]>
+    </insert>
+    
+    <update id="updateProfile" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_profile 
+            SET 
+                p_name = #{p_name},
+                enable_yn = #{enable_yn},
+                video_enable = #{video_enable},
+                video_option = #{video_option},
+                audio_enable = #{audio_enable},
+                audio_option = #{audio_option},
+                moddate = NOW()
+            WHERE
+                p_id = #{p_id};
+        ]]>
+    </update>
+
+    <delete id="deleteProfile" parameterType="hashmap">
+        <![CDATA[
+            DELETE FROM tb_profile
+            WHERE
+                p_id = #{p_id};
+        ]]>
+    </delete>
+</mapper>
+

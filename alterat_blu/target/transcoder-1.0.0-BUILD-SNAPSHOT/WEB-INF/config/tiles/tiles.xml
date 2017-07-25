@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+ <!DOCTYPE tiles-definitions PUBLIC
+       "-//Apache Software Foundation//DTD Tiles Configuration 2.1//EN"
+       "http://tiles.apache.org/dtds/tiles-config_2_1.dtd">
+
+<!-- Definitions for Tiles documentation   -->
+<tiles-definitions>
+
+  	<!-- =======================================================  -->
+  	<!-- Master definition  									-->
+  	<!-- =======================================================  -->
+
+    <definition name="*.tiles" template="/WEB-INF/tiles_template/nps_layout.jsp">
+		<put-attribute name="title"  value="NPS" type="string" />
+        <put-attribute name="header" value="/WEB-INF/tiles_template/nps_header.jsp" />
+        <put-attribute name="left"   value="/WEB-INF/tiles_template/nps_left.jsp" />
+		<put-attribute name="body"   value="/WEB-INF/jsp/{1}.jsp"/>
+        <put-attribute name="footer" value="/WEB-INF/tiles_template/nps_footer.jsp" />
+	</definition>
+
+    <definition name="*/*.tiles" template="/WEB-INF/tiles_template/nps_layout.jsp">
+        <put-attribute name="title"  value="NPS" type="string" />
+        <put-attribute name="header" value="/WEB-INF/tiles_template/nps_header.jsp" />
+        <put-attribute name="left"   value="/WEB-INF/tiles_template/nps_left.jsp" />
+        <put-attribute name="body"   value="/WEB-INF/jsp/{1}/{2}.jsp"/>
+        <put-attribute name="footer" value="/WEB-INF/tiles_template/nps_footer.jsp" />
+    </definition>
+
+    <definition name="*/*/*.tiles" template="/WEB-INF/tiles_template/nps_layout.jsp">
+        <put-attribute name="title"  value="NPS" type="string" />
+        <put-attribute name="header" value="/WEB-INF/tiles_template/nps_header.jsp" />
+        <put-attribute name="left"   value="/WEB-INF/tiles_template/nps_left.jsp" />
+		<put-attribute name="body"   value="/WEB-INF/jsp/{1}/{2}/{3}.jsp"/>
+        <put-attribute name="footer" value="/WEB-INF/tiles_template/nps_footer.jsp" />
+	</definition>
+
+    <definition name="*/*/*/*.tiles" template="/WEB-INF/tiles_template/nps_layout.jsp">
+        <put-attribute name="title"  value="NPS" type="string" />
+        <put-attribute name="header" value="/WEB-INF/tiles_template/nps_header.jsp" />
+        <put-attribute name="left"   value="/WEB-INF/tiles_template/nps_left.jsp" />
+        <put-attribute name="body"   value="/WEB-INF/jsp/{1}/{2}/{3}/{4}.jsp"/>
+        <put-attribute name="footer" value="/WEB-INF/tiles_template/nps_footer.jsp" />
+    </definition>
+
+
+    <definition name="*.excel" template="/WEB-INF/tiles_template/nps_excel_layout.jsp">
+        <put-attribute name="title" value="트랜스코더" type="string" />
+        <put-attribute name="body" value="/WEB-INF/jsp/{1}.jsp"/>
+    </definition>
+    <definition name="*/*.excel" template="/WEB-INF/tiles_template/nps_excel_layout.jsp">
+        <put-attribute name="title" value="트랜스코더" type="string" />
+        <put-attribute name="body" value="/WEB-INF/jsp/{1}/{2}.jsp"/>
+    </definition>
+    <definition name="*/*/*.excel" template="/WEB-INF/tiles_template/nps_excel_layout.jsp">
+        <put-attribute name="title" value="트랜스코더" type="string" />
+        <put-attribute name="body" value="/WEB-INF/jsp/{1}/{2}/{3}.jsp"/>
+    </definition>
+    <definition name="*/*/*/*.excel" template="/WEB-INF/tiles_template/nps_excel_layout.jsp">
+        <put-attribute name="title" value="트랜스코더" type="string" />
+        <put-attribute name="body" value="/WEB-INF/jsp/{1}/{2}/{3}/{4}.jsp"/>
+    </definition>
+	
+</tiles-definitions>

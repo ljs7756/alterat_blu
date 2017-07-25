@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MAC -->
+<!-- <beans xmlns="http://www.springframework.org/schema/beans" -->
+<!--     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" -->
+<!--     xsi:schemaLocation="http://www.springframework.org/schema/beans file:///usr/local/tomcat8/webapps/alterat/schema/spring-beans-4.2.xsd -->
+<!--                         http://www.springframework.org/schema/jdbc file:///usr/local/tomcat8/webapps/alterat/schema/spring-jdbc-4.2.xsd"> -->
+<!-- Local -->
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.2.xsd
+                        http://www.springframework.org/schema/jdbc  http://www.springframework.org/schema/jdbc/spring-jdbc-4.2.xsd">
+                            
+    <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" destroy-method="close">
+        <property name="driverClassName" value="com.mysql.jdbc.Driver"/>
+<!--         <property name="url" value="jdbc:mysql://localhost/alterat?useUnicode=true&amp;characterEncoding=utf8&amp;autoReconnect=true"/> -->
+        <!--property name="url" value="jdbc:mysql://localhost/alterat?useUnicode=true&amp;characterEncoding=utf8&amp;autoReconnect=true"/-->  <!-- Mac / Linux -->
+        <property name="url" value="jdbc:mysql://localhost/alterat?useUnicode=true&amp;characterEncoding=utf8&amp;autoReconnect=true"/>  <!-- Local -->
+        <property name="username" value="root"/>
+        <property name="password" value=""/>
+<!--    <property name="username" value="dunet"/> -->
+<!--    <property name="password" value="password1!"/> -->
+    </bean>
+</beans>

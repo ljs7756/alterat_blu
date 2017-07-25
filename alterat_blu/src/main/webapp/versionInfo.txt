@@ -1,0 +1,52 @@
+Alterat 버전정보
+
+v1.0.9
+- 머지작업 갯수를 6개, 트랜스코딩 가업을 6개로 늘림
+- 동시에 운영하지 않는다는 조건임.
+
+v1.0.8
+- 재시작/취소시 Thread수 감소하도록 처리
+- 설정부분 XML로 일원화
+- Spring Framework 4.2.4로 업그레이드
+- side-effect로 인해 ffmpeg process의 cleanup 코드 제거 함
+- MTS/TS 파일 머지할때 "Inprogress..... or Inprogress...TS"로 표시
+
+v1.0.7
+- JOB insert 시 간헐적인 primary 키 중복오류 수정
+- MOV 머지시 stream 2 가 데이터일 경우 Unsupported Codec 오류 나지만, 파일은 머지됨.
+  따라서, 해당경우를 예외 처리함.
+
+v1.0.6
+- MTS 파일 머지시 오디오 싱크 문제 해결
+
+v1.0.5
+- Merge 시 옵션을 '-c copy' 를 '-vcodec copy -acodec copy'으로 변경함
+- DB 연결 옵션 'autoReconnect=true' 추가함
+  (Tomcat 에 에러로그 발생부분 수정)
+- 공간부족('No space left on device') 메시지에 대해 에러처리
+- in 폴더 하위에 폴더만 있을 경우 수동처리 안되는 문제 해결
+- tc 후 tm작업줄때 src_file 위치 오류 수정
+
+v1.0.4
+- 변환된 그룹 파일 업로드시 순서대로 NPS에서 보일 수 있도록 수정함.
+   ** 트랜스코딩 완료순으로 보이지 않도록 함
+   ** 단일로 올릴경우 "제목" + '파일명" 으로 NPS에 보임 
+      (오류 아님, 인제스트팀 이전 요청사항으로 오류 아님)
+- 'tb_nps_meta' 테이블 수정함.
+
+v1.0.3
+- m2ts 파일 처리할 수 있도록 함.
+
+v1.0.2
+- MTS 머지시 "Error while decoding stream"이 발생하면 Fail로 처리함.
+  (해당영상 재생시 출력에 문제가 있음)
+- 진행중인 작업에 대해 취소(Cancel) 할수 있도록 처리함.
+- 작업취소시 발생할 수 있는 ffmpeg process를 kill 하도록 함.
+- GOPRO로 찍은 mp4 파일이 머지안되는 오류 수정함.
+- 머지시 동일한 파일 확장자가 아니면 경고메시지 출력토록 함.
+- mp4 파일을 머지할 경우 video code (h264, mpeg2video)에 따라 다르게 옵션 처리함
+- 등록할 파일이 하나일경우 단일로 등록될 수 있도록 처리함.
+
+v1.0.1
+- MTS 파일의 오디오코덱이 pcm_bluray 일경우 Merge되지 않는 문제해결
+  (pcm_bluray를 ac3로 변경하여 머지함)

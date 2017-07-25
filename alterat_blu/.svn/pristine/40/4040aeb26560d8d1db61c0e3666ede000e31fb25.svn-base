@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title></title>
+<link rel="stylesheet" href="css/tc.css">
+<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.4.min.js"></script>
+</head>
+
+<body class="bg_color">
+	<div class="section_wrap">
+    	<!-- 상단 메뉴 영역 -->
+    	<script type="text/javascript" src="script/top.js"></script>
+    	<!--// 상단 메뉴 영역 -->
+        <div id="pop4" class="pop_wrap" style="display:none;">
+        	<p style="position:relative;">
+            	<strong style="font-size:16px; color:#f90;">파일정보</strong>
+                <img id="close1" onclick="javascript:closeBtn('pop4');" src="images/pop_close.png" alt="close" style="position:absolute; right:0; top:0px;">
+            </p>
+            <div class="file_info_txt">
+            	Metadata:<br>
+                 major_brand     : qt  <br>
+                 minor_version   : 0<br>
+                 compatible_brands: qt  <br>
+                 creation_time   : 2014-11-04 07:20:37<br>
+                 encoder         : 8.1<br>
+                 encoder-kor     : 8.1<br>
+                 date            : 2014-11-04T16:20:37+0900<br>
+                 date-kor        : 2014-11-04T16:20:37+0900<br>
+                 location        : +37.5696+126.9780+034.587/<br>
+                 location-kor    : +37.5696+126.9780+034.587/<br>
+                 model           : iPhone 6 Plus<br>
+                 model-kor       : iPhone 6 Plus<br>
+                 make            : Apple<br>
+                 make-kor        : Apple<br>
+               Duration: 00:00:15.86, start: 0.000000, bitrate: 40233 kb/s<br>
+                 Stream #0:0(und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709), 1280x720, 40137 kb/s, 239.84 fps, 240 tbr, 2400 tbn, 4800 tbc (default)<br>
+                 Metadata:<br>
+                   rotate          : 90<br>
+                   creation_time   : 2014-11-04 07:20:37<br>
+                   handler_name    : Core Media Data Handler<br>
+                   encoder         : H.264<br>
+                 Side data:<br>
+                   displaymatrix: rotation of -90.00 degrees<br>
+                 Stream #0:1(und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 63 kb/s (default)<br>
+                 Metadata:<br>
+                   creation_time   : 2014-11-04 07:20:37<br>
+                   handler_name    : Core Media Data Handler<br>
+            </div>
+        </div>
+        
+        <div class="nps_wrap">
+        	<p style="padding:0 0 30px 0; font-weight:bold;">
+            	<span>
+                구분 <select name="" class="input_text">
+            	  <option>소재변환</option>
+            	</select>
+                </span>
+                <span style="margin-left:30px;">
+                기간검색 
+                <input name="" type="text" class="input_text"> ~ <input name="" type="text" class="input_text"> <img src="images/btn_search.png" style="vertical-align:middle;">
+                </span>
+                <span style="margin-left:30px;">
+                	status <select name="" class="input_text">
+            	  <option>Progress</option>
+            	</select>
+                </span>
+                <span style="margin-left:30px;">
+            	자동갱신 <input name="" type="checkbox" value="" class="chk_sty">
+                </span>
+          	</p>
+        	<table>
+                	<col width="100"><col width="100"><col width="200"><col width="140"><col width="400"><col width="120"><col width="120"><col width="100"><col width="175">
+                	<tr>
+                    	<th>ID</th>
+                        <th>Type</th>
+                        <th>File Path</th>
+                        <th>Size(Byte)</th>
+                        <th>Progress</th>
+                        <th>start</th>
+                        <th>End</th>
+                        <th>Status</th>
+                        <th>Control</th>
+                    </tr>
+                    <tr>
+                    	<td>J201510200001</td>
+                        <td>Transcoding</td>
+                        <td><a href="#" onclick="javascript:clickBtn('pop4');">D:\original\in\0000.MTS</a></td>
+                        <td>1,931,280,384<br>(1,842 MB)</td>
+                        <td>
+                        	<p class="graph_w" style="width:85%;">
+                            	<span style="width:30%;"></span>
+                            </p>
+                            <strong>30%</strong>
+                        </td>
+                        <td class="tc">
+                        	2015-10-20 19:05:50
+                        </td class="tc">
+                        <td class="tc">
+                        	2015-10-24 19:05:50
+                        </td>
+                        <td class="tc">
+                        	Progress
+                        </td>
+                        <td class="tc"><a href="#"><img src="images/btn_restart.png"></a><a href="#"><img src="images/btn_cancel.png" style="margin-left:6px;"></a></td>
+                    </tr>
+                     <tr>
+                    	<td>J201510200001</td>
+                        <td>Transcoding</td>
+                        <td>D:\original\in\0000.MTS</td>
+                        <td>1,931,280,384<br>(1,842 MB)</td>
+                        <td class="tl">
+                        	<p class="graph_w" style="width:85%;">
+                            	<span style="width:30%;"></span>
+                            </p>
+                            <strong>30%</strong>
+                        </td>
+                        <td class="tc">
+                        	2015-10-20 19:05:50
+                        </td>
+                        <td class="tc">
+                        	2015-10-24 19:05:50
+                        </td>
+                        <td class="tc">
+                        	Progress
+                        </td>
+                        <td class="tc"><a href="#"><img src="images/btn_restart.png"></a><a href="#"><img src="images/btn_cancel.png" style="margin-left:6px;"></a></td>
+                    </tr>
+                    <tr>
+                    	<td>J201510200001</td>
+                        <td>Transcoding</td>
+                        <td>D:\original\in\0000.MTS</td>
+                        <td>1,931,280,384<br>(1,842 MB)</td>
+                        <td class="tl">
+                        	<p class="graph_w" style="width:85%;">
+                            	<span style="width:30%;"></span>
+                            </p>
+                            <strong>30%</strong>
+                        </td>
+                        <td class="tc">
+                        	2015-10-20 19:05:50
+                        </td>
+                        <td class="tc">
+                        	2015-10-24 19:05:50
+                        </td>
+                        <td class="tc">
+                        	Progress
+                        </td>
+                        <td class="tc"><a href="#"><img src="images/btn_restart.png"></a><a href="#"><img src="images/btn_cancel.png" style="margin-left:6px;"></a></td>
+                    </tr>
+                </table>
+            <p class="list_num_1">
+                <img src="images/previous.png">
+                    <a href="#"><strong>1</strong></a>
+                    <a href="#"><strong>2</strong></a>
+                    <a href="#"><strong class="now">3</strong></a>
+                    <a href="#"><strong>4</strong></a>
+                    <a href="#"><strong>5</strong></a>
+                    <a href="#"><strong>6</strong></a>
+                    <a href="#"><strong>7</strong></a>
+                    <a href="#"><strong>8</strong></a>
+                    <a href="#"><strong>9</strong></a>
+                <img src="images/next.png">
+            </p>
+            <div class="btn_add" style="clear:both; margin:30px 0;">
+            	<a href="#">수동처리</a> <a href="#" style="margin:0 10px;">이력삭제</a> <a href="#" style="margin:0 10px 0 0;">소스 소재삭제</a> <a href="#">타겟 소재삭제</a>
+        	</div>
+        </div>
+    </div>
+    <div class="footer_wrap">
+        <img src="images/footer_text.png">
+    </div>
+</body>
+</html>

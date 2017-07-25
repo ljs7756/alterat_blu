@@ -1,0 +1,431 @@
+package com.cha.transcoder.sending.control;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.log4j.Logger;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.JsonGenerationException;
+import org.codehaus.jackson.JsonParser;
+import org.codehaus.jackson.JsonToken;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.ModelAndView;
+
+import com.cha.transcoder.common.AlteratConfig;
+import com.cha.transcoder.common.AlteratConfigLoader;
+import com.cha.transcoder.common.CommandMap;
+import com.cha.transcoder.demon.GeneralProcessor;
+import com.cha.transcoder.demon.ScheduledJobRunner;
+import com.cha.transcoder.demon.TcJobMaker;
+import com.cha.transcoder.demon.TransferProcessor;
+import com.cha.transcoder.monitor.dao.MonitorDAO;
+import com.cha.transcoder.monitor.service.MonitorService;
+import com.cha.transcoder.nps.MediaFileFilter;
+import com.cha.transcoder.nps.service.RegisterService;
+import com.cha.transcoder.profile.dao.ProfileDAO;
+import com.cha.transcoder.sending.dao.SendingDAO;
+import com.cha.transcoder.sending.service.SendingService;
+import com.cha.transcoder.watchfolder.dao.WatchfolderDAO;
+
+@Controller
+public class SendingController extends GeneralProcessor {
+
+	private Logger log = Logger.getLogger(SendingController.class);
+	private final static int PAGE_LIMIT = 10;
+
+	@Resource(name = "sendingService")
+	private SendingService sendingService;
+//
+//	@Resource(name = "registerService")
+//	private RegisterService registerService;
+//
+	@RequestMapping(value = "/selectSending.do")
+	public ModelAndView openMonitorList(CommandMap commandMap) throws Exception {
+		ModelAndView mv = new ModelAndView("/sending");
+
+		Map<String, Object> map = commandMap.getMap();
+
+		int offset = 0;
+		int current_page = 0;
+
+		if (map.get("current_page") == null) {
+			offset = 0;
+			current_page = 0;
+		} else {
+			if (map.get("current_page") instanceof String) {
+				current_page = Integer.parseInt((String) map.get("current_page"));
+			} else if (map.get("current_page") instanceof String[]) {
+				String[] arrCurPage = (String[]) map.get("current_page");
+				current_page = Integer.parseInt(arrCurPage[0]);
+			}
+
+			offset = current_page * PAGE_LIMIT;
+		}
+
+		map.put("off_set", Integer.toString(offset));
+		map.put("page_count", Integer.toString(PAGE_LIMIT));
+
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		String strToday = sdf.format(Calendar.getInstance().getTime());
+
+		String begin_date = (String) map.get("begin_date");
+		if (begin_date == null) {
+			map.put("begin_date", strToday);
+			begin_date = strToday;
+		} else {
+			map.put("begin_date", begin_date);
+		}
+		String end_date = (String) map.get("end_date");
+		if (end_date == null) {
+			map.put("end_date", strToday);
+			end_date = strToday;
+		} else {
+			map.put("end_date", end_date);
+		}
+
+		String chk_status_all = (String) map.get("chk_status_all");
+		String chk_holdon = (String) map.get("chk_holdon");
+		String chk_progress = (String) map.get("chk_progress");
+		String chk_canceled = (String) map.get("chk_canceled");
+		String chk_failed = (String) map.get("chk_failed");
+		String chk_completed = (String) map.get("chk_completed");
+
+		if (chk_status_all == null) {
+			if (chk_holdon == null) {
+				map.put("chk_holdon", "Empty");
+			} else {
+				map.put("chk_holdon", "Standby");
+			}
+
+			if (chk_progress == null) {
+				map.put("chk_progress", "Empty");
+			} else {
+				map.put("chk_progress", "Inprogress");
+			}
+
+			if (chk_canceled == null) {
+				map.put("chk_canceled", "Empty");
+			} else {
+				map.put("chk_canceled", "Canceled");
+			}
+
+			if (chk_failed == null) {
+				map.put("chk_failed", "Empty");
+			} else {
+				map.put("chk_failed", "Failed");
+			}
+
+			if (chk_completed == null) {
+				map.put("chk_completed", "Empty");
+			} else {
+				map.put("chk_completed", "Completed");
+			}
+		} else {
+			map.put("chk_holdon", "Standby");
+			map.put("chk_progress", "Inprogress");
+			map.put("chk_canceled", "Canceled");
+			map.put("chk_failed", "Failed");
+			map.put("chk_completed", "Completed");
+		}
+
+		// 리스트를 가져온다.
+		List<Map<String, Object>> list = sendingService.select(commandMap.getMap());
+		int count_all = sendingService.selectCountAll(commandMap.getMap());
+
+		mv.addObject("list", list);
+		mv.addObject("current_page", current_page);
+		mv.addObject("tot_page", count_all / PAGE_LIMIT);
+
+		// 페이지 리스트 보여주는 화면
+		int start_page = 0;
+		if (current_page > 0) {
+			start_page = (current_page / 10) * 10;
+		}
+		
+	        int chk = count_all % PAGE_LIMIT;
+	        int tot_page = 0;
+   
+	        if(chk == 0 && count_all != 0){
+	        	tot_page = (count_all / PAGE_LIMIT)-1;
+	        }else{
+	        	tot_page = count_all / PAGE_LIMIT;
+	        }
+
+
+
+		int pages = start_page + 9;
+		if (pages > tot_page) {
+			pages = tot_page;
+		}
+
+		String check_yn = null;
+		if (map.get("check_yn") instanceof String) {
+			check_yn = (String) map.get("check_yn");
+		}
+
+		if (check_yn == null) {
+			mv.addObject("check_yn", "N");
+		} else {
+			mv.addObject("check_yn", check_yn);
+		}
+
+		// JSP 페이지로 값을 보낸다.
+		mv.addObject("start_page", start_page);
+		mv.addObject("current_page", current_page);
+		mv.addObject("pages", pages);
+		mv.addObject("begin_date", begin_date);
+		mv.addObject("end_date", end_date);
+		mv.addObject("chk_status_all", chk_status_all);
+		mv.addObject("chk_holdon", chk_holdon);
+		mv.addObject("chk_progress", chk_progress);
+		mv.addObject("chk_canceled", chk_canceled);
+		mv.addObject("chk_failed", chk_failed);
+		mv.addObject("chk_completed", chk_completed);
+
+		return mv;
+	}
+	
+	
+	@RequestMapping(value = "/getprogressFtp.do")
+	public ModelAndView getProgress(CommandMap commandMap) throws Exception {
+		  
+		ModelAndView mv = new ModelAndView("jsonView");
+
+		Map<String, Object> map = commandMap.getMap();
+		String no = (String)map.get("no");
+		
+		
+		Map<String, Object> params = new HashMap();
+		
+		params = sendingService.getprogress(map);
+		
+//		log.debug("progress==="+progress);
+
+
+		mv.addObject("params", params);
+
+		return mv;
+	}
+	
+	@RequestMapping(value = "/ftpinfo.do")
+	public ModelAndView profileChannel() throws Exception {
+		ModelAndView mv = new ModelAndView("jsonView");
+		// DB에서 프로파일 목록을 검색한다.
+		List<Map<String, Object>> list = sendingService.ftpInfoList();
+		mv.addObject("list", list);
+	
+		return mv;
+	}
+	
+	@RequestMapping(value = "/filesending.do")
+	public ModelAndView register(@RequestParam HashMap<String, String> requestMap, HttpServletRequest request, HttpServletResponse response)
+			throws Exception {
+		ModelAndView mv = new ModelAndView("jsonView");
+		int affected = -1;
+		try {
+			String json_filedata = requestMap.get("json_filedata").toString();
+
+			log.debug("json_filedata=" + json_filedata);
+
+			JsonFactory jsonfactory = new JsonFactory();
+			JsonParser json_filedataParser = jsonfactory.createJsonParser(json_filedata);
+
+			List<Map<String, String>> fileList = new ArrayList<Map<String, String>>(); // 파일 리스트.
+			Map<String, String> fileMap = null; // 파일 정보.
+
+			// 파일 메터데이터 파싱.
+			while (json_filedataParser.nextToken() != JsonToken.END_OBJECT) {
+				String token = json_filedataParser.getCurrentName();
+				if (token != null) {
+					if (token.equals("file")) {
+						while (json_filedataParser.nextToken() != JsonToken.END_ARRAY) {
+							String sub_token = json_filedataParser.getCurrentName();
+							if (sub_token != null) {
+								if (sub_token == "fileid") {                                    //원본파일 경로
+									fileMap = new HashMap<String, String>();
+									json_filedataParser.nextToken();
+									fileMap.put(sub_token, json_filedataParser.getText());
+								} else if (sub_token == "filename") {                            //원본파일 이름
+									json_filedataParser.nextToken();
+									fileMap.put(sub_token, json_filedataParser.getText());
+								} else if (sub_token == "no") {                               //변환할 확장자
+									json_filedataParser.nextToken();
+									fileMap.put(sub_token, json_filedataParser.getText());
+								} else if (sub_token == "channel") {                                //선택한 프로파일 아이디
+									json_filedataParser.nextToken();
+									fileMap.put(sub_token, json_filedataParser.getText());
+									fileList.add(fileMap);
+								}
+								log.debug("metaMap[" + fileMap + "]");
+							}
+						}
+					}
+				}
+			}
+
+			json_filedataParser.close();
+
+			// 트랜스코딩 작업을 실제 등록한다.
+			affected = sendingService.ftpSending(fileList);
+
+			log.debug("affected=" + affected);
+
+		} catch (JsonGenerationException jge) {
+			log.error(jge.getMessage());
+			jge.printStackTrace();
+		} catch (JsonMappingException je) {
+			log.error(je.getMessage());
+			je.printStackTrace();
+		} catch (Exception e) {
+			log.error(e.getMessage());
+			e.printStackTrace();
+		}
+
+		mv.addObject("result", affected);
+
+		return mv;
+	}
+	
+	/**
+	 * 파일전송 등록
+	 * 
+	 */
+	public String insertFtp(SqlSession session, File source_file, String source_path, String source_name, String target_path, String ftp_code) {
+	
+		String file_size = Long.toString(source_file.length());
+		String target = target_path+"/"+source_name;
+		
+		if (source_file.canRead()) {
+			try {
+				if (session != null) {
+
+					SendingDAO sDAO = SendingDAO.getInstance();
+					
+					Map<String, Object> params = new HashMap();
+
+					params.put("channel", ftp_code);
+					params.put("source_path", source_file.toString());
+					params.put("target_path", target);
+					params.put("file_size", file_size);
+					params.put("job_status", "Standby");
+					params.put("prgress", "0");
+
+					if (source_file.isFile()) {
+						// 파라미터 출력
+						sDAO.printQueryWithParam("sending.insert", params);
+
+						session.insert("sending.insert", params);
+					}
+				} else {
+					log.debug("session is null");
+				}
+			} catch (Exception e) {
+				log.error(e.getMessage());
+				e.printStackTrace();
+			}
+		}
+		
+		return "J";
+}
+	
+	/**
+	 * pooq용 자동 파일전송 등록
+	 * 
+	 */
+	public String insertFtpAuto(SqlSession session, File source_file, String source_path, String source_name, String target_path, String ftp_code, String j_id) {
+	
+		String file_size = Long.toString(source_file.length());
+		String target = target_path+"/"+source_name;
+		
+		String newPID = null;
+
+		if (source_file.canRead()) {
+			try {
+				if (session != null) {
+
+					SendingDAO sDAO = SendingDAO.getInstance();
+					
+					Map<String, Object> params = new HashMap();
+
+					params.put("channel", ftp_code);
+					params.put("source_path", source_file.toString());
+					params.put("target_path", target);
+					params.put("file_size", file_size);
+					params.put("job_status", "Standby");
+					params.put("prgress", "0");
+
+						//Standby --> Done
+						Map<String, Object> param_Id = new HashMap();
+						param_Id.put("j_id", j_id);
+						
+				
+						sDAO.printQueryWithParam("monitor.updateFileStatus", param_Id);
+						sDAO.printQueryWithParam("sending.insert", params);
+						session.insert("monitor.updateFileStatus", param_Id);
+						session.insert("sending.insert", params);
+				} else {
+					log.debug("session is null");
+				}
+			} catch (Exception e) {
+				log.error(e.getMessage());
+				e.printStackTrace();
+			}
+		}
+		return "J";
+}	
+	
+	
+	@RequestMapping(value = "/cancelFtp.do")
+	public void cancelJob(CommandMap commandMap, HttpServletResponse response) throws Exception {
+		Map<String, Object> map = commandMap.getMap();
+
+		// Acive되어있는 Thread 를 취소시킨다.
+		String j_id = (String) map.get("j_id");
+		String j_type = (String) map.get("j_type");
+		
+		ScheduledJobRunner.cancelActiveThread(j_id, j_type);
+		// DB의 상태값을 'Canceled'로 변경한다.
+		sendingService.updateCanceledState(map);
+
+		try {
+			response.getWriter().print("success");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	
+	@RequestMapping(value = "/tm_monitor.do")
+	public ModelAndView openTmMonitor(CommandMap commandMap) throws Exception {
+		ModelAndView mv = new ModelAndView("/tm_monitor");
+
+		return mv;
+	}
+	
+	
+}

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="sending">
+	<select id="select" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                no, 
+                channel,
+                source_path,
+                target_path,
+                CASE WHEN file_size < 1073741824 THEN  CONCAT( CAST(ROUND( (file_size/1048576), 1 ) AS CHAR), ' MB')
+                     WHEN file_size < 1099511627776 THEN  CONCAT( CAST(ROUND( (file_size/1073741824), 1 ) AS CHAR), ' GB' ) END file_size,
+                DATE_FORMAT(start_date, '%Y-%m-%d %H:%i:%s') as start_date,
+                DATE_FORMAT(end_date, '%Y-%m-%d %H:%i:%s') as end_date,
+                TIMEDIFF(end_date, start_date) as diff,
+                job_status,
+                progress,
+                regdate,
+                moddate
+            FROM
+                tb_sending  
+            WHERE
+                (job_status = '${chk_holdon}' or job_status like '${chk_progress}%' or job_status = '${chk_canceled}' or job_status = '${chk_failed}' or job_status = '${chk_completed}')
+            AND
+                date_format(regdate, '%Y-%m-%d') >= str_to_date('${begin_date}', '%Y-%m-%d')
+            AND
+                date_format(regdate, '%Y-%m-%d') <= str_to_date('${end_date}', '%Y-%m-%d')
+            ORDER BY no desc
+            LIMIT ${off_set}, ${page_count}
+        ]]>
+	</select>
+	<select id="selectCountAll" parameterType="hashmap" resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT 
+                count(*) as tot_cnt
+            FROM
+                tb_sending
+            WHERE
+                (job_status = '${chk_holdon}' or job_status like '${chk_progress}%' or job_status = '${chk_canceled}' or job_status = '${chk_failed}' or job_status = '${chk_completed}')
+            AND
+                date_format(regdate, '%Y-%m-%d') >= str_to_date('${begin_date}', '%Y-%m-%d')
+            AND
+                date_format(regdate, '%Y-%m-%d') <= str_to_date('${end_date}', '%Y-%m-%d')
+        ]]>
+	</select>
+    <select id="selectStandby" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+             SELECT 
+                no, 
+                channel,
+                source_path,
+                target_path
+            FROM
+                tb_sending
+            WHERE job_status = 'Standby' 
+            ORDER BY no ASC
+            LIMIT 1
+        ]]>
+    </select>
+    <select id="getprogress" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+              SELECT
+                progress,
+                job_status,
+                DATE_FORMAT(start_date, '%Y-%m-%d %H:%i:%s') AS start_date,
+                DATE_FORMAT(end_date, '%Y-%m-%d %H:%i:%s') AS end_date,
+                TIMEDIFF(end_date, start_date) AS diff
+              FROM
+                tb_sending   
+            WHERE
+                no = '${no}'
+        ]]>
+	</select>
+	<insert id="insert" parameterType="hashmap">
+        <![CDATA[
+            INSERT INTO tb_sending (
+                channel, 
+                source_path,
+                target_path,
+                file_size,
+                job_status,
+                progress,
+                regdate
+               )
+            VALUES (
+                #{channel},
+                #{source_path}, 
+                #{target_path},  
+                #{file_size},      
+                #{job_status}, 
+                #{progress}, 
+                NOW()  
+            )
+        ]]>
+	</insert>
+   	<update id="updateStatus" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_sending 
+            SET 
+                start_date=STR_TO_DATE(#{start_date}, '%Y/%m/%d %H:%i:%s'), 
+                job_status=#{job_status},
+                progress=#{progress},
+                moddate=NOW()
+            WHERE
+                no = #{no}
+        ]]>
+	</update>
+	<update id="updateCanceledState" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_sending 
+            SET 
+             	progress=0,
+                end_date=NOW(),
+                job_status='Canceled',
+                moddate=NOW()
+            WHERE
+                no = #{j_id}
+        ]]>
+	</update>
+	
+</mapper>
+

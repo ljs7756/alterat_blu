@@ -1,0 +1,528 @@
+package com.cha.transcoder.demon;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FilePermission;
+import java.io.FileWriter;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.security.PermissionCollection;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.log4j.Logger;
+
+import com.cha.transcoder.common.AlteratConfigLoader;
+import com.cha.transcoder.common.AlteratConfig;
+import com.cha.transcoder.common.TcUtil;
+import com.cha.transcoder.monitor.dao.MonitorDAO;
+
+public class TsMergeProcessor extends GeneralProcessor implements Runnable, TcConstant {
+
+	private Logger log = Logger.getLogger(MergeProcessor.class);
+
+	private String job_id;
+	private String[] src_files;
+	private String file_path;
+	private String file_type;
+	private String file_name;
+	private String job_option;
+	private String target_directory;
+
+	private int idxSign = 0;
+
+	public TsMergeProcessor() {
+	}
+
+	public void setPara(String j_id, String[] src_files, String file_path, String file_type, String file_name, String job_option,
+			String target_directory) {
+		this.job_id = j_id;
+		this.src_files = src_files;
+		this.file_path = file_path;
+		this.file_type = file_type;
+		this.file_name = file_name;
+		this.job_option = job_option;
+		this.target_directory = target_directory;
+	}
+
+	public void run() {
+		try {
+			// CMD에서 읽어온 문자열을 저장한다.
+			String line = "";
+
+			// 에러가 났을때 메시지를 저장했다가, metadat에 넣어준다.
+			String errMsg = "";
+
+			// H264로 찍은 영상인지 구분하는 필드
+			// MP4 파일의 경우, 코덱이 h264 or mpeg2video, 두가지 종류임.
+			boolean isH264 = false;
+
+			// MTS 파일 형식인지 구분
+			boolean isMTS = false;
+
+			// 진행률을 계산하기위해 개별소재의 duration을 모두 합한 값.
+			int t_progress = 0;
+			StringBuffer bMetadata = new StringBuffer();
+
+			try {
+				for (int i = 0; i < src_files.length; i++) {
+					String file_path = src_files[i];
+
+					FilePermission fp1 = new FilePermission(file_path, "read");
+					PermissionCollection pc = fp1.newPermissionCollection();
+					pc.add(fp1);
+
+					FilePermission fp2 = new FilePermission(file_path, "write");
+					pc.add(fp2);
+					FilePermission fp3 = new FilePermission(file_path, "execute");
+					pc.add(fp3);
+					FilePermission fp4 = new FilePermission(file_path, "readlink");
+					pc.add(fp4);
+
+					if (pc.implies(new FilePermission(file_path, "read,write,execute,readlink"))) {
+						log.debug("Permission for " + file_path + " is read and write and execute.");
+					} else {
+						log.debug("No read, write permission for " + file_path);
+					}
+
+					File source_file = new File(file_path);
+
+					// 개별 파일의 메타데이터를 가져온다.
+					MediaFileInfo fileInfo = getMetadata(source_file);
+
+					if (fileInfo.getVideo_codec() != null && fileInfo.getVideo_codec().equals(MediaFileInfo.MP4_H264)) {
+						isH264 = true;
+					}
+
+					String source_file_name = source_file.getName();
+					log.debug("source_file_name=" + source_file_name);
+					source_file_name = source_file_name.toLowerCase();
+
+					if (source_file_name.indexOf(".mts") != -1) {
+						isMTS = true;
+					}
+
+					bMetadata.append(fileInfo.getMetatdata());
+					bMetadata.append("\n");
+
+					t_progress += TcUtil.toSecond(fileInfo.getDuration());
+
+					log.debug("source_file=" + file_path + ", execute=" + source_file.canExecute() + ", read=" + source_file.canRead() + ", write="
+							+ source_file.canWrite());
+					log.debug("duration=" + fileInfo.getDuration());
+
+					if (!source_file.canRead()) {
+						log.debug("Can't read a this file.");
+						return;
+					}
+				}
+			} catch (Exception ex) {
+				ex.printStackTrace();
+			}
+
+			// -----------------------------------------------------------------
+			// MP4 파일을 TS 파일로 변환한다.
+			log.debug("This '" + file_name + "' is transcoding into a TS file.");
+			String[] intermediates_files = makeIntermediate(src_files, file_path, isH264, isMTS);
+
+			if (intermediates_files == null) {
+				log.debug("Could not make ts file.");
+				return;
+			}
+			log.debug("End of TS transcoding.");
+
+			// -----------------------------------------------------------------
+			// To make a list file.
+			file_path = file_path.substring(0, file_path.lastIndexOf(File.separatorChar));
+			log.debug("file_path=" + file_path);
+
+			String list_file = file_path + File.separatorChar + "source_files.txt";
+			log.debug("list_file=" + list_file);
+
+			BufferedWriter bw = new BufferedWriter(new FileWriter(list_file));
+			bw.write("# Do not delete this file.");
+			bw.write('\n');
+
+			log.debug("------------ source_files.txt -----------");
+			for (int i = 0; i < intermediates_files.length; i++) {
+				String row = "file '" + file_path + File.separatorChar + intermediates_files[i] + "'";
+				bw.write(row);
+				bw.write('\n');
+				log.debug(row);
+
+				intermediates_files[i] = file_path + File.separatorChar + intermediates_files[i];
+			}
+			log.debug("-----------------------------------------");
+			bw.close();
+
+			// Duration & Metadata를 Update 한다.
+			Map<String, Object> up_params = new HashMap();
+			up_params.put("j_id", job_id);
+			String duration = TcUtil.toTime(t_progress);
+
+			// ffmpeg이 있는 경로
+			AlteratConfig altConfig = AlteratConfigLoader.getInstance().getConfig();
+			String ffmpeg_path = altConfig.getFfmpeg();
+
+			String strCmd = ffmpeg_path + "-f concat -i " + list_file + " -vcodec copy -acodec copy ";
+			if (!isMTS) {
+				strCmd = strCmd + "-bsf:a aac_adtstoasc ";
+			}
+			strCmd = strCmd + file_path + File.separatorChar + file_name;
+
+			log.debug("==============================");
+			log.debug(strCmd);
+			log.debug("==============================");
+
+			// FFmpeg 프로세스를 실행한다.
+			List<String> cmd = new ArrayList<String>();
+			cmd.add(ffmpeg_path.trim());
+			cmd.add("-f");
+			cmd.add("concat");
+			cmd.add("-i");
+			cmd.add(list_file.trim());
+			cmd.add("-vcodec");
+			cmd.add("copy");
+			cmd.add("-acodec");
+			cmd.add("copy");
+			if (!isMTS) {
+				cmd.add("-bsf:a");
+				cmd.add("aac_adtstoasc");
+			}
+			cmd.add(file_path + File.separatorChar + file_name);
+
+			ProcessBuilder builder = new ProcessBuilder(cmd);
+
+			// Pint all commands
+			List list = builder.command();
+			for (int i = 0; i < list.size(); i++) {
+				log.debug("cmd_" + i + "=" + list.get(i));
+			}
+
+			builder.directory(new File(altConfig.getFfmpeg_home()));
+			Process process = builder.start();
+
+			// FFmpeg이 실행하는 커멘트에서 진행상태를 읽어와 진행률을 처리한다.
+			// OutputStream stdin = process.getOutputStream();
+			InputStream stderr = process.getErrorStream();
+			// InputStream stdout = process.getInputStream();
+
+			boolean isPrmission = true;
+			boolean isError = false;
+
+			int pre_percent = 0;
+
+			MonitorDAO monitorDAO = MonitorDAO.getInstance();
+
+			// clean up if any output in stderr
+			BufferedReader brCleanUp = new BufferedReader(new InputStreamReader(stderr));
+			while ((line = brCleanUp.readLine()) != null) {
+				// System.out.println ("[Stderr] " + line);
+				log.debug("[Stdout] " + line);
+
+				/*
+				 * 머지할대 incorrect timestamps 는 에러가 아님.
+				 */
+				if (line.indexOf("Error opening filters") != -1) {
+					errMsg = "Error opening filters";
+					log.error(errMsg);
+					isError = true;
+				} else if (line.indexOf("No such file or directory") != -1) {
+					errMsg = "No such file or directory";
+					log.error(errMsg);
+					isError = true;
+				}
+
+				int offset = line.indexOf("size=");
+				if (offset != -1) {
+					// 몇프로인지 계산한다.
+					Map<String, Object> params = new HashMap();
+					params.put("j_id", job_id);
+					//params.put("job_starttime", TcUtil.getCurrentTime());
+					params.put("job_status", "Inprogress");
+
+					int startOffset = line.indexOf("time=");
+					int endOffset = line.indexOf("bitrate=");
+
+					if (startOffset == -1) {
+						log.info("No timestamps.");
+					} else {
+						String currentTime = line.substring(startOffset + 5, endOffset);
+						currentTime = currentTime.trim();
+
+						int l_progress = TcUtil.toSecond(currentTime);
+
+						int percent = (int) (l_progress * 100 / t_progress);
+						if (percent > 100) {
+							percent = 100;
+						}
+
+						Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+						if (pre_percent != percent) {
+							params.put("job_progress", Integer.toString(percent));
+							monitorDAO.update("monitor.updateJobInprogress", params);
+
+							log.debug("job_id=" + job_id + ", percent=" + percent + "% (" + l_progress + "/" + t_progress + ", " + currentTime + "/"
+									+ duration + ")");
+
+							pre_percent = percent;
+						}
+					}
+				}
+			}
+
+			log.debug("isError=" + isError);
+
+			if (isError) {
+				// 머지 하다가 에러난 경우
+				Map<String, Object> params = new HashMap();
+				params.put("j_id", job_id);
+				params.put("job_endtime", TcUtil.getCurrentTime());
+				params.put("job_status", "Failed");
+				params.put("metadata", errMsg);
+
+				Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+				monitorDAO.update("monitor.updateJobUncompleted", params);
+
+				log.error("job_id=" + job_id + " Failed");
+				brCleanUp.close();
+			} else {
+				// 작업완료 된 경우
+				Map<String, Object> params = new HashMap();
+				params.put("j_id", job_id);
+
+				File taget = new File(file_path + File.separatorChar + file_name);
+				MediaFileInfo fileInfo = getMetadata(taget);
+				up_params.put("duration", fileInfo.getDuration());
+				up_params.put("metadata", fileInfo.getMetatdata());
+
+				monitorDAO.update("monitor.updateMetadata", up_params);
+
+				params.put("job_endtime", TcUtil.getCurrentTime());
+				params.put("job_status", "Completed");
+				params.put("job_progress", "100");
+
+				Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+				monitorDAO.update("monitor.updateJobCompleted", params);
+
+				// 머지된 파일의 사이즈를 DB 에 저장한다.
+				File merged_file = new File(file_path + File.separatorChar + file_name);
+				long merged_file_size = merged_file.length();
+
+				params.put("file_size", merged_file_size);
+				monitorDAO.update("monitor.updateFileSize", params);
+
+				log.debug("job_id=" + job_id + ", Completed");
+				brCleanUp.close();
+
+				File file = new File(list_file);
+				boolean result = file.delete();
+
+				log.debug("list_file=" + list_file + ", deleted=" + result);
+			}
+
+			// 임시로 만들어진 ts 파일을 지운다.
+			if (intermediates_files != null) {
+				for (int k = 0; k < intermediates_files.length; k++) {
+					File temp = new File(intermediates_files[k]);
+					boolean deleted = temp.delete();
+					if (deleted) {
+						log.debug(intermediates_files[k] + " file deleted");
+					} else {
+						log.warn(intermediates_files[k] + " file not deleted");
+					}
+				}
+			}
+		} catch (InterruptedException e) { // Inprogress중 사용자에 의한 Cancel 작업시 Thread를 
+			log.error(e.getMessage());
+			e.printStackTrace();
+		} catch (Exception e) {
+			log.error(e.getMessage());
+			e.printStackTrace();
+		}
+
+		// 파일이 다시 머지 될수 있도록 목록에서 빼준다.
+		ScheduledJobRunner.countDownProcessor(TYPE_MERGE);
+
+//		ScheduledJobRunner.removeActiveThread(job_id);
+	}
+
+	// 파일이름만 리턴된다 (경로포함 안됨)
+	private String[] makeIntermediate(String[] src_files, String target_dir, boolean isH264, boolean isMTS) {
+		String[] intermediate_files = null;
+		String errMsg = "";
+		boolean isError = false;
+
+		try {
+			intermediate_files = new String[src_files.length];
+
+			for (int i = 0; i < src_files.length; i++) {
+
+				log.debug("File.separatorChar=" + File.separatorChar);
+
+				// ffmpeg이 있는 경로
+				AlteratConfig altConfig = AlteratConfigLoader.getInstance().getConfig();
+				String ffmpeg_path = altConfig.getFfmpeg();
+
+				log.debug("src_files[i]=" + src_files[i] + ", target_dir=" + target_dir + ", isH264=" + isH264);
+
+				String temp_filepath = src_files[i].substring(0, src_files[i].lastIndexOf(File.separatorChar));
+				String temp_file = src_files[i].substring(src_files[i].lastIndexOf(File.separatorChar) + 1);
+
+				temp_file = "inter_" + temp_file;
+				temp_file = temp_file.replace(".MP4", ".ts");
+				temp_file = temp_file.replace(".mp4", ".ts");
+				temp_file = temp_file.replace(".MTS", ".ts");
+				temp_file = temp_file.replace(".mts", ".ts");
+
+				intermediate_files[i] = temp_file;
+
+				log.debug("temp_filepath=" + temp_filepath);
+				log.debug("temp_file=" + temp_file);
+
+				String home = temp_filepath;
+				String strCmd = ffmpeg_path + "-i " + src_files[i] + " -vcodec copy -acodec aac -strict -2 -f mpegts ";
+
+				if (isH264) {
+					strCmd = strCmd + "-bsf:v h264_mp4toannexb ";
+				}
+
+				strCmd = strCmd + home + File.separatorChar + temp_file;
+				log.debug("==============================");
+				log.debug(strCmd);
+				log.debug("==============================");
+
+				// FFmpeg 프로세스를 실행한다.
+				List<String> cmd = new ArrayList<String>();
+				cmd.add(ffmpeg_path.trim());
+				cmd.add("-i");
+				cmd.add(src_files[i]);
+				cmd.add("-vcodec");
+				cmd.add("copy");
+				cmd.add("-acodec");
+				cmd.add("aac");
+				cmd.add("-strict");
+				cmd.add("-2");
+				cmd.add("-f");
+				cmd.add("mpegts");
+
+				if (isH264 && !isMTS) {
+					cmd.add("-bsf:v");
+					cmd.add("h264_mp4toannexb");
+				}
+
+				cmd.add(home + File.separatorChar + temp_file);
+
+				ProcessBuilder builder = new ProcessBuilder(cmd);
+				// builder.directory(new File(altConfig.getFFmpegHome()));
+
+				// Pint all commands
+				List list = builder.command();
+				for (int j = 0; j < list.size(); j++) {
+					log.debug("cmd_" + j + "=" + list.get(j));
+				}
+
+				builder.directory(new File(home));
+				Process process = builder.start();
+
+				// FFmpeg이 실행하는 커멘트에서 진행상태를 읽어와 진행률을 처리한다.
+				// OutputStream stdin = process.getOutputStream();
+				InputStream stderr = process.getErrorStream();
+				// InputStream stdout = process.getInputStream();
+
+				boolean isPrmission = true;
+
+				int pre_percent = 0;
+
+				// brCleanUp.close();
+
+				// clean up if any output in stderr
+				String line = null;
+				BufferedReader brCleanUp = new BufferedReader(new InputStreamReader(stderr));
+				while ((line = brCleanUp.readLine()) != null) {
+					log.debug("[Stdout] " + line);
+
+					if (line.indexOf("Conversion failed") != -1) {
+						errMsg = "Conversion failed";
+						log.error(errMsg);
+						isError = true;
+					}
+
+					updateProgressRateForTS();
+				}
+
+				if (isError) {
+					// MP4 -> TS 만들다가 에러난 경우.						
+					Map<String, Object> params = new HashMap();
+					params.put("j_id", job_id);
+					params.put("job_endtime", TcUtil.getCurrentTime());
+					params.put("job_status", "Failed");
+					params.put("metadata", errMsg);
+
+					Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+					MonitorDAO monitorDAO = MonitorDAO.getInstance();
+					monitorDAO.update("monitor.updateJobUncompleted", params);
+
+					log.debug("job_id=" + job_id + ", Failed");
+					brCleanUp.close();
+				} else {
+					// 작업완료 된 경우
+					log.debug("job_id=" + job_id + ", ts file created.");
+					brCleanUp.close();
+				}
+			}
+		} catch (InterruptedException e) { // Inprogress중 사용자에 의한 Cancel 작업시 Thread를 
+			log.error(e.getMessage());
+			e.printStackTrace();
+		} catch (Exception e) {
+			log.error(e.getMessage());
+			e.printStackTrace();
+		}
+
+		// 파일 하나라도 Error가 나면 null을 리턴한다.
+		if (isError) {
+			intermediate_files = null;
+		}
+
+		return intermediate_files;
+	}
+
+	long current_time = 0L;
+
+	// 머지작업이 진행될때 Status란에 상태를 표시해 주기 위함.
+	private void updateProgressRateForTS() {
+		if ((current_time + 5000) > System.currentTimeMillis()) {
+			return; // 5초가 안도었을대는 스킵함
+		}
+		current_time = System.currentTimeMillis();
+
+		Map<String, Object> params = new HashMap();
+		params.put("j_id", job_id);
+		params.put("job_progress", "0");
+		params.put("job_status", "Inprogress" + getSign());
+
+		MonitorDAO monitorDAO = MonitorDAO.getInstance();
+		monitorDAO.update("monitor.updateJobInprogressTS", params);
+	}
+
+	public String getSign() {
+		String[] SIGN = new String[] { ".....", "...TS" };
+
+		String sign = SIGN[idxSign];
+
+		if (idxSign < 1) {
+			idxSign++;
+		} else if (idxSign == 1) {
+			idxSign = 0;
+		}
+
+		return sign;
+	}
+}

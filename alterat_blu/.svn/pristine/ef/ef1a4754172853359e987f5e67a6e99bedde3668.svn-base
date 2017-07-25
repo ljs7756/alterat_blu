@@ -1,0 +1,420 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="monitor">
+	<!-- 'ORDER BY j_id desc' 구문은 regdate 가 batch 처리했을때 동일하게 들어가서 오더링이 되지 않아서 
+		쓴 구문임 -->
+	<select id="select" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                j_id, 
+                j_type,
+                src_path,
+                src_list,
+                file_path,
+                file_type,
+                file_name,
+                CASE WHEN file_size < 1073741824 THEN CONCAT( ROUND( (file_size/1048576), 1 ), ' MB')
+                     WHEN file_size < 1099511627776 THEN CONCAT( ROUND( (file_size/1073741824), 1 ), ' GB' ) END file_size,
+                file_status,
+                target_directory,
+                duration,
+                metadata,
+                delete_yn,
+                job_option,
+                DATE_FORMAT(job_starttime, '%Y-%m-%d %H:%i:%s') as job_starttime,
+                DATE_FORMAT(job_endtime, '%Y-%m-%d %H:%i:%s') as job_endtime,
+                TIMEDIFF(job_endtime, job_starttime) as diff,
+                job_status,
+                job_progress,
+                regdate,
+                moddate
+            FROM
+                tb_job  
+            WHERE
+                (job_status = '${chk_holdon}' or job_status like '${chk_progress}%' or job_status = '${chk_canceled}' or job_status = '${chk_failed}' or job_status = '${chk_completed}')
+            AND
+                date_format(regdate, '%Y-%m-%d') >= str_to_date('${begin_date}', '%Y-%m-%d')
+            AND
+                date_format(regdate, '%Y-%m-%d') <= str_to_date('${end_date}', '%Y-%m-%d')
+            AND
+                (j_type = '${chk_transcoding}' or j_type = '${chk_transferring}' or j_type = '${chk_merge}')
+            ORDER BY j_id desc
+            LIMIT ${off_set}, ${page_count}
+        ]]>
+	</select>
+
+	<select id="selectDetail" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                j_id, 
+                j_type,
+                src_path,
+                src_list,
+                file_path,
+                file_type,
+                file_name,
+                FORMAT(file_size, 0) as file_size,
+                FORMAT(file_size / 1024 / 1024, 0)  as file_size_gb,
+                file_status,
+                target_directory,
+                duration,
+                metadata,
+                delete_yn,
+                job_option,
+                DATE_FORMAT(job_starttime, '%Y-%m-%d %H:%i:%s') as job_starttime,
+                DATE_FORMAT(job_endtime, '%Y-%m-%d %H:%i:%s') as job_endtime,
+                TIMEDIFF(job_endtime, job_starttime) as diff,
+                job_status,
+                job_progress,
+                regdate,
+                moddate
+            FROM
+                tb_job  
+            WHERE
+                j_id = '${j_id}'
+        ]]>
+	</select>
+
+	<!-- 'ORDER BY j_id asc' 구문은 regdate 가 batch 처리했을때 동일하게 들어가서 오더링이 되지 않아서 
+		쓴 구문임 -->
+	<select id="selectHoldOn" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                j_id, 
+                j_type,
+                src_path,
+                src_list,
+                file_path,
+                file_type,
+                file_name,
+                file_size,
+                file_status,
+                target_directory,
+                IFNULL(target_type, 'mp4') target_type,
+                bitrate,
+                duration,
+                metadata,
+                delete_yn,
+                job_option,
+                DATE_FORMAT(job_starttime, '%Y-%m-%d %H:%i:%s') as job_starttime,
+                DATE_FORMAT(job_endtime, '%Y-%m-%d %H:%i:%s') as job_endtime,
+                job_status,
+                job_progress,
+                regdate,
+                moddate
+            FROM
+                tb_job
+            WHERE job_status = 'Hold On' 
+            AND j_type = '${j_type}'
+            ORDER BY j_id asc
+            LIMIT 1
+        ]]>
+	</select>
+	
+	<!-- pooq 자동 트랜스코딩할 파일 선택 -->
+	<select id="selectStanby" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                j_id, 
+                j_type,
+                src_path,
+                src_list,
+                file_path,
+                file_type,
+                file_name,
+                file_size,
+                file_status,
+                target_directory,
+                IFNULL(target_type, 'mp4') target_type,
+                bitrate,
+                duration,
+                metadata,
+                delete_yn,
+                job_option,
+                DATE_FORMAT(job_starttime, '%Y-%m-%d %H:%i:%s') as job_starttime,
+                DATE_FORMAT(job_endtime, '%Y-%m-%d %H:%i:%s') as job_endtime,
+                job_status,
+                job_progress,
+                regdate,
+                moddate
+            FROM
+                tb_job
+            WHERE j_type='Merge'
+            AND file_status = 'Standby' 
+            AND job_status='completed'
+            AND job_progress='100'
+            ORDER BY j_id ASC
+        ]]>
+	</select>
+
+	<select id="selectCountAll" parameterType="hashmap" resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT 
+                count(*) as tot_cnt
+            FROM
+                tb_job
+            WHERE
+                (job_status = '${chk_holdon}' or job_status like '${chk_progress}%' or job_status = '${chk_canceled}' or job_status = '${chk_failed}' or job_status = '${chk_completed}')
+            AND
+                date_format(regdate, '%Y-%m-%d') >= str_to_date('${begin_date}', '%Y-%m-%d')
+            AND
+                date_format(regdate, '%Y-%m-%d') <= str_to_date('${end_date}', '%Y-%m-%d')
+            AND
+                (j_type = '${chk_transcoding}' or j_type = '${chk_transferring}' or j_type = '${chk_merge}')
+        ]]>
+	</select>
+
+	<select id="selectCount" parameterType="hashmap" resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT 
+                count(*) as tot_cnt
+            FROM
+                tb_job
+            WHERE
+                file_path = '${file_path}'
+        ]]>
+	</select>
+
+	<select id="selectPrimaryKey" parameterType="hashmap"
+		resultType="java.lang.String">
+        <![CDATA[
+            SELECT 
+                j_id
+            FROM
+                tb_job
+            WHERE
+                j_id = (SELECT MAX(j_id) FROM tb_job
+                        WHERE DATE_FORMAT(regdate, '%Y%m%e') = DATE_FORMAT(NOW(), '%Y%m%e'))
+        ]]>
+	</select>
+	
+	<select id="getprogress" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+              SELECT
+                j_type, 
+                job_progress,
+                job_status,
+                IFNULL(target_directory,'') AS target_directory,
+                IFNULL(target_name,'') AS target_name,
+                DATE_FORMAT(job_starttime, '%Y-%m-%d %H:%i:%s') AS job_starttime,
+                DATE_FORMAT(job_endtime, '%Y-%m-%d %H:%i:%s') AS job_endtime,
+                TIMEDIFF(job_endtime, job_starttime) AS diff
+              FROM
+                tb_job   
+            WHERE
+                j_id = '${j_id}'
+        ]]>
+	</select>
+
+	<insert id="insert" parameterType="hashmap">
+        <![CDATA[
+            INSERT INTO tb_job (
+                j_id, 
+                j_type,
+                src_path,
+                src_list,
+                file_path,
+                file_type,
+                file_name,
+                file_size,
+                file_status,
+                target_directory,
+                target_name,
+                target_type,
+                bitrate,
+                duration,
+                metadata,
+                delete_yn,
+                job_option,
+                job_starttime,
+                job_endtime,
+                job_status,
+                job_progress,
+                regdate)
+            VALUES (
+                #{j_id},
+                #{j_type}, 
+                #{src_path},  
+                #{src_list},      
+                #{file_path}, 
+                #{file_type}, 
+                #{file_name}, 
+                #{file_size}, 
+                #{file_status},
+                #{target_directory},
+                #{target_name},
+                #{target_type},
+                #{bitrate},
+                #{duration}, 
+                #{metadata},
+                #{delete_yn}, 
+                #{job_option},
+                #{job_starttime}, 
+                #{job_endtime}, 
+                #{job_status}, 
+                #{job_progress},    
+                NOW()  
+            )
+        ]]>
+	</insert>
+
+	<update id="update" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET  
+				file_path=#{file_path},
+				file_type=#{file_type},
+				file_name=#{file_name},
+				file_size=#{file_size},
+				file_status=#{file_status`},
+				delete_yn=#{delete_yn},
+				job_starttime=STR_TO_DATE(#{job_starttime}, '%Y/%m/%d %H:%i:%s'),
+				job_endtime=STR_TO_DATE(#{job_endtime}, '%Y/%m/%d %H:%i:%s'),
+				job_status=#{job_status},
+				job_progress=#{job_progress}, 
+				moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateStatus" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET 
+                job_starttime=STR_TO_DATE(#{job_starttime}, '%Y/%m/%d %H:%i:%s'), 
+                job_status=#{job_status},
+                job_progress=#{job_progress},
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateResetStatus" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET 
+                job_starttime=null,
+                job_endtime=null,
+                job_status='Hold On',
+                job_progress=0,
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateCanceledState" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET 
+                job_starttime=null,
+                job_endtime=null,
+                job_status='Canceled',
+                job_progress=0,
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateMetadata" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET 
+                duration=#{duration},
+                metadata=#{metadata}
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+	
+    <update id="updateJobInprogress" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET 
+                job_status=#{job_status},
+                job_progress=#{job_progress},
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+    </update>
+
+	<!-- MP4를 TS로 만드는동안 진행률을 표시하고 Progress(-, \ , |, /, -, \, |), 끝나면 Progress 
+		로 바꾼다. -->
+	<update id="updateJobInprogressTS" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET 
+                job_status=#{job_status},
+                job_progress=#{job_progress},
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateJobUncompleted" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET  
+                job_endtime=STR_TO_DATE(#{job_endtime}, '%Y/%m/%d %H:%i:%s'), 
+                job_status=#{job_status},
+                metadata=#{metadata},
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateJobCompleted" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET   
+                job_endtime=STR_TO_DATE(#{job_endtime}, '%Y/%m/%d %H:%i:%s'), 
+                job_status=#{job_status},
+                job_progress=#{job_progress}, 
+                moddate=NOW()
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<update id="updateFileSize" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET   
+                file_size=#{file_size}
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+	
+	<update id="updateFileStatus" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_job 
+            SET   
+                file_status= 'Done'
+            WHERE
+                j_id = #{j_id}
+        ]]>
+	</update>
+
+	<delete id="deleteAll" parameterType="hashmap">
+        <![CDATA[
+            DELETE FROM tb_job
+            WHERE
+                j_id like 'J%'
+        ]]>
+	</delete>
+
+	<insert id="testInsertBatch" parameterType="hashmap">
+        <![CDATA[
+            INSERT INTO tb_test(j_id, j_type)
+            VALUES( #{j_id}, #{j_type})
+        ]]>
+	</insert>
+</mapper>
+

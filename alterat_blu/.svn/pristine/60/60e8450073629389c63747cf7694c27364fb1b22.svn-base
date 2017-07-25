@@ -1,0 +1,423 @@
+package com.cha.transcoder.demon;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FilePermission;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.security.PermissionCollection;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.log4j.Logger;
+
+import com.cha.transcoder.common.AlteratConfigLoader;
+import com.cha.transcoder.common.AlteratConfig;
+import com.cha.transcoder.common.TcUtil;
+import com.cha.transcoder.monitor.dao.MonitorDAO;
+import com.cha.transcoder.nps.NpsTask;
+import com.cha.transcoder.nps.SoapManager;
+import com.cha.transcoder.nps.dao.RegisterDAO;
+
+//실제로 파일 변환하는 클래스
+public class TcJobProcessor extends GeneralProcessor implements Runnable, TcConstant {
+
+	private Logger log = Logger.getLogger(TcJobProcessor.class);
+	private String job_id = null;
+	private String src_file = null;
+	private String file_name = null;
+	private String file_size = null;
+	private String job_option = null;
+	private String target_directory = null;
+	private String target_type = null;
+	private String bitrate = null;
+
+	public TcJobProcessor() {
+	}
+
+	public void setPara(String job_id, String file_path, String file_type, String file_name, String file_size, String job_option,
+			String target_directory, String target_type, String bitrate) {
+
+		this.job_id = job_id;
+		this.src_file = file_path;
+		this.file_name = file_name;
+		this.file_size = file_size;
+		this.job_option = job_option;
+		this.target_directory = target_directory;
+		this.target_type = target_type;
+		this.bitrate = bitrate;
+		
+	}
+
+	public void run() {
+		try {
+			log.debug("Transcoding, job_id=" + job_id + ", file_path=" + src_file + ", file_name=" + file_name);
+
+			String line = "";
+			String errMsg = "";
+
+			try {
+				FilePermission fp1 = new FilePermission(src_file, "read");
+				PermissionCollection pc = fp1.newPermissionCollection();
+				pc.add(fp1);
+
+				FilePermission fp2 = new FilePermission(src_file, "write");
+				pc.add(fp2);
+				FilePermission fp3 = new FilePermission(src_file, "execute");
+				pc.add(fp3);
+				FilePermission fp4 = new FilePermission(src_file, "readlink");
+				pc.add(fp4);
+
+				if (pc.implies(new FilePermission(src_file, "read,write,execute,readlink"))) {
+					log.debug("Permission for " + src_file + " is read and write and execute.");
+				} else {
+					log.debug("No read, write permission for " + src_file);
+				}
+
+				File source_file = new File(src_file);
+
+				log.debug("source_file=" + src_file);
+				log.debug("execute=" + source_file.canExecute() + ", read=" + source_file.canRead() + ", write=" + source_file.canWrite());
+
+				if (!source_file.canRead()) {
+					log.debug("Can't read a this file.");
+					return;
+				}
+
+			} catch (Exception ex) {
+				ex.printStackTrace();
+			}
+
+			// 퍼미션 변경관련해서 Delay를 주었던 부분을 주석함. (11/2)
+			// Thread.sleep(2 * 1000);
+
+			String tFile_name = file_name.substring(0, file_name.indexOf("."));
+			String target_file = target_directory + "/" + tFile_name +"_"+bitrate+"." + target_type;
+			target_file = target_file.replace("/", "\\");
+			// 윈도우가 아닐때 경로구분자를 바꿔준다.
+			AlteratConfig altConfig = AlteratConfigLoader.getInstance().getConfig();
+			if (!altConfig.isWindow()) {
+				target_file = target_file.replace("\\", "/");
+			}
+
+			// 타겟 파일이 존재하면 지운다.
+			File tgt_file = new File(target_file);
+			if (tgt_file.isFile() && tgt_file.exists()) {
+				tgt_file.delete();
+			}
+
+			// FFprobe로 미디어의 Duration 을 읽어온다. 진행률을 표시하는데 사용한다.
+			MediaFileInfo info = getMetadata(new File(src_file));
+
+			// 일반적인 옵션은 설정에서 가져온다.
+			if (isSlomo) {
+				log.debug("This file is a slomo");
+
+				job_option = "-r 29.97 -vf setpts=(10/1)*PTS -an -f mxf -vcodec mpeg2video -flags +ilme+ildct -qscale:v 2 -g 15 -keyint_min 15 -pix_fmt yuv422p -b:v 50000000 -minrate 50000000 -maxrate 50000000 ";
+				// setpts 부분에 " 또는 ' 가 들어가면 MAC 에서 동작 안함.
+			}
+
+			if (isAudioProblem) {
+				log.debug("This file is no audio.");
+				job_option = "-r 29.97 -an -f mxf -vcodec mpeg2video -flags +ilme+ildct -qscale:v 2 -g 15 -keyint_min 15 -pix_fmt yuv422p -b:v 50000000 -minrate 50000000 -maxrate 50000000 ";
+			}
+
+			log.debug("file_path=" + src_file);
+			log.debug("job_option=" + job_option);
+			log.debug("target_file=" + target_file);
+
+			if (isPermissionDenied) {
+				log.debug("Permission denied.");
+
+				// Permission이 없는경우 Hold On으로 다시 바꾼다. 
+				Map<String, Object> up_params = new HashMap();
+				up_params.put("j_id", job_id);
+				up_params.put("job_starttime", TcUtil.getCurrentTime());
+				up_params.put("job_status", "Hold On");
+				up_params.put("job_progress", "0");
+
+				MonitorDAO monitorDAO = MonitorDAO.getInstance();
+				monitorDAO.update("monitor.updateStatusHoldOn", up_params);
+
+				// 파일이 다시 트랜스코더 될수 있도록 목록에서 빼준다.
+				// JobMaker.getInstance().removeMediaFile(file_path);
+				ScheduledJobRunner.countDownProcessor(ScheduledJobRunner.TYPE_TRANSCODING);
+
+				ScheduledJobRunner.removeActiveThread(job_id);
+				return;
+			}
+
+			Map<String, Object> up_params = new HashMap();
+			up_params.put("j_id", job_id);
+			if (isSlomo) {
+				// 기본 29.97, 슬로모 239.84, (30, 240 => 약 8배 이므로 x8)
+				int tmpDuration = TcUtil.toSecond(info.getDuration()) * 8;
+				up_params.put("duration", TcUtil.toTime(tmpDuration));
+				info.setDuration(TcUtil.toTime(tmpDuration));
+
+			} else {
+				up_params.put("duration", info.getDuration());
+			}
+			up_params.put("metadata", info.getMetatdata());
+
+			MonitorDAO monitorDAO = MonitorDAO.getInstance();
+			monitorDAO.update("monitor.updateMetadata", up_params);
+
+			// ffmpeg이 있는 경로
+			String ffmpeg_path = altConfig.getFfmpeg();
+
+			log.debug("ffprobe, duration=" + info.getDuration());
+
+			String strCmd = ffmpeg_path + "-i " + src_file + " " + job_option + " " + target_file;
+			log.debug("==============================");
+			log.debug(strCmd);
+			log.debug("==============================");
+
+			// FFmpeg 프로세스를 실행한다.
+			List<String> cmd = new ArrayList<String>();
+			cmd.add(ffmpeg_path.trim());
+			cmd.add("-i");
+			cmd.add(src_file.trim());
+			String[] options = job_option.split(" ");
+			for (int i = 0; i < options.length; i++) {
+				cmd.add(options[i]);
+			}
+			cmd.add(target_file.trim());
+
+			ProcessBuilder builder = new ProcessBuilder(cmd);
+
+			// Pint all commands
+			List list = builder.command();
+			for (int i = 0; i < list.size(); i++) {
+				log.debug("cmd_" + i + "=" + list.get(i));
+			}
+
+			builder.directory(new File(altConfig.getFfmpeg_home()));
+			Process process = builder.start();
+
+			// FFmpeg이 실행하는 커멘트에서 진행상태를 읽어와 진행률을 처리한다.
+			// OutputStream stdin = process.getOutputStream();
+			InputStream stderr = process.getErrorStream();
+			// InputStream stdout = process.getInputStream();
+
+			boolean isPrmission = true;
+			boolean isError = false;
+
+			int pre_percent = 0;
+
+			// clean up if any output in stderr
+			BufferedReader brCleanUp = new BufferedReader(new InputStreamReader(stderr));
+			while ((line = brCleanUp.readLine()) != null) {
+				// System.out.println ("[Stderr] " + line);
+				log.debug("[Stdout] " + line);
+
+				if (line.indexOf("Permission denied") != -1) {
+					errMsg = "Permission denied";
+					log.error(errMsg);
+					isPrmission = false;
+					return;
+				}
+
+				if (line.indexOf("Could not write header") != -1) {
+					errMsg = "Could not write header";
+					log.error(errMsg);
+					isError = true;
+					break;
+				}
+
+				if (line.indexOf("Video encoding failed") != -1) {
+					errMsg = "Video encoding failed";
+					log.error(errMsg);
+					isError = true;
+					break;
+				}
+
+				if (line.indexOf("Conversion failed") != -1) {
+					errMsg = "Conversion failed";
+					log.error(errMsg);
+					isError = true;
+					break;
+				}
+
+				if (line.indexOf("Error opening filters") != -1) {
+					errMsg = "Error opening filters";
+					log.error(errMsg);
+					isError = true;
+					break;
+				}
+
+				if (line.indexOf("No space left on device") != -1) {
+					errMsg = "No space left on device";
+					log.error(errMsg);
+					isError = true;
+					break;
+				}
+
+				// TC 실행중에 중지명령 받았을 경우.
+				if (line.indexOf("Exiting normally, received signal 15.") != -1) {
+					errMsg = "Exiting normally, received signal 15.";
+					log.error(errMsg);
+					isError = true;
+					break;
+				}
+
+				int offset = line.indexOf("size=");
+				if (offset != -1) {
+					// 몇프로인지 계산한다.
+					Map<String, Object> params = new HashMap();
+					params.put("j_id", job_id);
+					//params.put("job_starttime", TcUtil.getCurrentTime());
+					params.put("job_status", "Inprogress");
+
+					int startOffset = line.indexOf("time=");
+					int endOffset = line.indexOf("bitrate=");
+
+					if (startOffset == -1) {
+						log.info("No timestamps.");
+					} else {
+						String currentTime = line.substring(startOffset + 5, endOffset);
+						currentTime = currentTime.trim();
+
+						int l_progress = TcUtil.toSecond(currentTime);
+						int t_progress = TcUtil.toSecond(info.getDuration());
+
+						int percent = (int) (l_progress * 100 / t_progress);
+						if (percent > 100) {
+							percent = 100;
+						}
+
+						Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+						// 슬로모 영상의 경우 변환된 파일의 영상의 길이를 가지고 작업진행률을 예측하기 힘들어
+						// 여기서 100% 로 처리하지 않고, Thread가 끝났을 경우에 처리할 수 있도록 함. 
+						if (pre_percent != percent && percent < 100) {
+							params.put("job_progress", Integer.toString(percent));
+							monitorDAO.update("monitor.updateJobInprogress", params);
+							pre_percent = percent;
+
+							log.debug("job_id=" + job_id + ", percent=" + percent + "% (" + l_progress + "/" + t_progress + ", " + currentTime + "/"
+									+ info.getDuration() + ")");
+
+							pre_percent = percent;
+						}
+					}
+				}
+			}
+
+			if (isPrmission) {
+				if (isError) {
+					// 트랜스코딩 하다가 에러난 경우
+					Map<String, Object> params = new HashMap();
+					params.put("j_id", job_id);
+					params.put("job_endtime", TcUtil.getCurrentTime());
+					params.put("job_status", "Failed");
+					params.put("metadata", errMsg);
+
+					Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+					monitorDAO.update("monitor.updateJobUncompleted", params);
+
+					log.error("job_id=" + job_id + " Failed");
+					brCleanUp.close();
+				} else {
+					// 작업완료 된 경우
+					Map<String, Object> params = new HashMap();
+					params.put("j_id", job_id);
+
+					params.put("job_endtime", TcUtil.getCurrentTime());
+					params.put("job_status", "Completed");
+					params.put("job_progress", "100");
+
+					Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+
+					// MonitorDAO monitorDAO = MonitorDAO.getInstance();
+					monitorDAO.update("monitor.updateJobCompleted", params);
+
+					log.debug("job_id=" + job_id + " Completed");
+					brCleanUp.close();
+
+					Map<String, Object> params2 = new HashMap();
+					params2.put("j_id", job_id);
+
+					RegisterDAO registerDAO = RegisterDAO.getInstance();
+					String g_id = registerDAO.selectGID(params2);
+
+					if (g_id == null) {
+						log.debug("g_id is null. maybe this case is manual processing.");
+						ScheduledJobRunner.countDownProcessor(TYPE_TRANSCODING);
+
+						ScheduledJobRunner.removeActiveThread(job_id);
+						return;
+					}
+
+					params2.put("g_id", g_id);
+
+					//nps등록 프로세스
+//					Map<String, Object> meta_result = registerDAO.selectNPSMetadata(params2);
+//					String nps_response = (String) meta_result.get("nps_response");
+//
+//					log.debug("nps_response=" + nps_response);
+//
+//					int begin_index = nps_response.indexOf("target");
+//					int end_index = nps_response.indexOf("channel");
+//
+//					if (begin_index != -1 && end_index != -1) {
+//
+//						String dest_file = nps_response.substring(begin_index, end_index);
+//						String new_file_name = dest_file.substring(dest_file.lastIndexOf(File.separatorChar) + 1);
+//						new_file_name = new_file_name.substring(0, new_file_name.indexOf("\""));
+//
+//						dest_file = nps_response.substring(begin_index + 9, end_index - 3);
+//						dest_file = dest_file.replace('\\', '/');
+//						dest_file = dest_file.replaceAll("//", "/");
+//						dest_file = dest_file.replace('/', File.separatorChar);
+//						dest_file = dest_file.substring(0, dest_file.lastIndexOf(Character.toString(File.separatorChar)));
+//
+//						AlteratConfig conf = AlteratConfigLoader.getInstance().getConfig();
+//						dest_file = conf.getDest_dir() + dest_file;
+//
+//						//log.debug("Check, dest_file=" + dest_file);
+//
+//						NpsTask npsTask = new NpsTask();
+//						int idxStart = nps_response.indexOf("task_id") + 10;
+//						int idxEnd = nps_response.indexOf("content_id") - 3;
+//						String taskID = nps_response.substring(idxStart, idxEnd);
+//
+//						idxStart = nps_response.indexOf("type") + 7;
+//						idxEnd = nps_response.indexOf("source") - 3;
+//						String taskCode = nps_response.substring(idxStart, idxEnd);
+//
+//						npsTask.setTaskID(taskID);
+//						npsTask.setTypeCode(taskCode);
+//
+//						log.debug("npsTask=" + npsTask);
+//
+//						String tgt_file_size = Long.toString(tgt_file.length());
+//
+//						log.debug("tgt_file_size=" + tgt_file_size);
+//						SoapManager.getInstance().insertTransferringJob(new_file_name, target_file, tgt_file_size, dest_file, npsTask);
+//
+//						// 파일이 다시 트랜스코더 될수 있도록 목록에서 빼준다.
+//						TcJobMaker.getInstance().removeMediaFile(src_file);
+//					} else {
+//						log.warn("begin_index=" + begin_index + ", end_index=" + end_index);
+//					}
+				}
+			} else {
+				log.debug("No permission.");
+			}
+		} catch (InterruptedException e) { // Inprogress중 사용자에 의한 Cancel 작업시 Thread를 
+			log.error(e.getMessage());
+			e.printStackTrace();
+		} catch (Exception e) {
+			log.error(e.getMessage());
+			e.printStackTrace();
+		}
+
+		ScheduledJobRunner.countDownProcessor(TYPE_TRANSCODING);
+
+		ScheduledJobRunner.removeActiveThread(job_id);
+	}
+}

@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="register">
+	<insert id="insertNPSMetadata" parameterType="hashmap">
+        <![CDATA[
+            INSERT INTO alterat.tb_nps_meta(
+                g_id
+              , j_id
+              , file_path
+              , file_name
+              , user_id
+              , type
+              , flag
+              , metadata_type
+              , `4000288`
+              , `4000289`
+              , `4000292`
+              , `4000293`
+              , `4000294`
+              , `4778141`
+              , `4778261`
+              , `4778262`
+              , `4778263`
+              , `4778265`
+              , `4778283`
+              , `4778407`
+              , k_content_id
+              , k_ud_content_id
+              , k_title
+              , c_category_id
+              , k_datagrade
+              , `ext-comp-1066`
+              , k_storterm
+              , `ext-comp-1063`
+              , full_metadata
+              , file_index
+              , regdate
+            ) VALUES (
+                #{g_id}
+              , #{j_id}
+              , #{file_path}
+              , #{file_name}
+              , #{user_id}
+              , #{type}
+              , #{flag}
+              , #{metadata_type}
+              , #{4000288}
+              , #{4000289}
+              , #{4000292}
+              , #{4000293}
+              , #{4000294}
+              , #{4778141}
+              , #{4778261}
+              , #{4778262}
+              , #{4778263}
+              , #{4778265}
+              , #{4778283}
+              , #{4778407}
+              , #{k_content_id}
+              , #{k_ud_content_id}
+              , #{k_title}
+              , #{c_category_id}
+              , #{k_datagrade}
+              , #{ext-comp-1066}
+              , #{k_storterm}
+              , #{ext-comp-1063}
+              , #{full_metadata}
+              , #{file_index}
+              , CURRENT_TIMESTAMP
+            )
+        ]]>
+	</insert>
+
+
+	<select id="selectNPSFile" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT file_path as 'filename'
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+               AND j_id = '${j_id}'
+        ]]>
+	</select>
+
+	<select id="selectNPSMetadata" parameterType="hashmap"
+		resultType="hashmap">
+        <![CDATA[
+            SELECT g_id, j_id, file_path, file_name, user_id, type, flag, metadata_type
+                 , `4000288`, `4000289`, `4000292`, `4000293`, `4000294`, `4778141`, `4778261`, `4778262`, `4778263`, `4778265`, `4778283`, `4778407`
+                 , k_content_id, k_ud_content_id, k_title, c_category_id, k_datagrade, `ext-comp-1066`, k_storterm, `ext-comp-1063`, full_metadata
+                 , nps_response
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+               AND j_id = '${j_id}'
+        ]]>
+	</select>
+
+	<select id="selectNPSFullMetadata" parameterType="hashmap"
+		resultType="hashmap">
+        <![CDATA[
+            SELECT file_path, file_name, full_metadata 
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+               AND j_id = '${j_id}'
+        ]]>
+	</select>
+
+	<select id="selectParentID" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT parent_id 
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+               AND file_index = 1
+        ]]>
+	</select>
+
+	<select id="selectNPSGroupCount" parameterType="hashmap"
+		resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT COUNT(g_id) AS group_count
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+        ]]>
+	</select>
+
+	<select id="selectFileIndex" parameterType="hashmap" resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT file_index
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+               AND j_id = '${j_id}'      
+        ]]>
+	</select>
+
+	<select id="selectGID" parameterType="hashmap" resultType="java.lang.String">
+        <![CDATA[
+            SELECT distinct g_id
+              FROM tb_nps_meta
+             WHERE j_id = '${j_id}'
+        ]]>
+	</select>
+	
+	<select id="selectGountGID" parameterType="hashmap" resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT count(*)
+              FROM tb_nps_meta
+             WHERE g_id = '${g_id}'
+        ]]>
+    </select>
+
+	<select id="selectNPSoap" parameterType="hashmap" resultType="hashmap">
+        <![CDATA[
+            SELECT j_id, file_path, file_name, k_title, c_category_id, k_content_id
+                 , k_ud_content_id, nps_pgm_id, nps_mtrl_id, nps_pgm_round, nps_pgm_round_code
+                 , nps_pgm_subname, nps_broadcast_date, nps_pgm_memo, nps_mtrl_type
+                 , nps_keyword, nps_pgm_pd, nps_pgm_class, k_datagrade, k_storterm 
+              FROM tb_nps_meta
+             WHERE j_id = '${j_id}'
+        ]]>
+	</select>
+
+	<!--update id="updateFileIndex" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_nps_meta 
+               SET file_index = #{file_index}
+             WHERE g_id = #{g_id}
+               AND j_id = #{j_id}
+        ]]>
+	</update-->
+
+    <update id="updateParentID" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_nps_meta 
+               SET parent_id = #{parent_id}
+             WHERE g_id = #{g_id}
+               AND j_id = #{j_id}
+        ]]>
+    </update>
+
+    <update id="updateNpsResponse" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_nps_meta 
+               SET nps_response = #{nps_response}
+             WHERE g_id = #{g_id}
+               AND j_id = #{j_id}
+        ]]>
+    </update>
+	
+	<delete id="deleteAll" parameterType="hashmap">
+        <![CDATA[
+            DELETE FROM tb_nps_meta
+            WHERE
+                g_id like 'G%'
+        ]]>
+    </delete>
+
+</mapper>
+

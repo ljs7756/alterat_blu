@@ -1,0 +1,557 @@
+package com.cha.transcoder.demon;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+
+import org.apache.http.HttpEntity;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.log4j.Logger;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import com.cha.transcoder.common.TcUtil;
+import com.cha.transcoder.monitor.control.MonitorController;
+import com.cha.transcoder.sending.control.SendingController;
+import com.cha.transcoder.monitor.dao.MonitorDAO;
+import com.cha.transcoder.nps.MediaFileFilter;
+import com.cha.transcoder.profile.dao.ProfileDAO;
+import com.cha.transcoder.sending.dao.SendingDAO;
+import com.cha.transcoder.watchfolder.dao.WatchfolderDAO;
+
+
+
+@Service
+public class ScheduledJobRunner implements TcConstant {
+	
+	@Resource(name = "monitorController")
+	private MonitorController monitorController;
+	
+	@Resource(name = "sendingController")
+	private SendingController SendingController;
+	
+	private static Logger log = Logger.getLogger(ScheduledJobRunner.class);
+
+	// Alterat에서 관리하고 있는 기능별 쓰레드 수 
+	public static int NUMBER_OF_TRANSCODING = 0;
+	public static int NUMBER_OF_MERGE = 0;
+	static int NUMBER_OF_TRANSFERRING = 0;
+
+	// Delay Time
+	private static final int DELAY_1_MINUTE = 60 * 1000;
+	public static  Hashtable activeThread = new Hashtable(LIMIT_OF_TRANSCODING + LIMIT_OF_MERGE + LIMIT_OF_TRANSFERRING);
+    private static final String USER_AGENT = "Mozilla/5.0";
+
+
+
+	// 트랜스코딩하기위한 작업을 가져온다.
+	@Scheduled(fixedDelay = 500)
+	public void getHoldOnJobForTranscoding() {
+		
+	
+		MonitorDAO monitorDAO = MonitorDAO.getInstance();
+
+		if (monitorDAO != null) {
+			Map<String, Object> params = new HashMap();
+			params.put("job_status", "Hold On");
+			params.put("j_type", "Transcoding");
+
+			Map<String, Object> oneOfTcJob = null;
+			try {
+				oneOfTcJob = (Map<String, Object>) monitorDAO.selectHoldOn(params);
+			} catch (Exception e) {
+				log.error(e.getMessage());
+			}
+
+			if (oneOfTcJob != null) {
+				if (NUMBER_OF_TRANSCODING < LIMIT_OF_TRANSCODING) {
+					
+					log.debug("Number of Transcoding Threads=" + NUMBER_OF_TRANSCODING);
+
+					String j_id = (String) oneOfTcJob.get("j_id");
+					String file_path = (String) oneOfTcJob.get("file_path");
+					String file_type = (String) oneOfTcJob.get("file_type");
+					String file_name = (String) oneOfTcJob.get("file_name");
+					String file_size = (String) oneOfTcJob.get("file_size");
+					file_size = file_size.replace(",", "");
+					String job_option = (String) oneOfTcJob.get("job_option");
+					String target_directory = (String) oneOfTcJob.get("target_directory");
+					String target_name = (String) oneOfTcJob.get("target_name");
+					String target_type = (String) oneOfTcJob.get("target_type");
+					String bitrate = (String) oneOfTcJob.get("bitrate");
+					
+
+					TcJobProcessor job = new TcJobProcessor();
+					job.setPara(j_id, file_path, file_type, file_name, file_size, job_option, target_directory, target_type, bitrate);
+					Thread t = new Thread(job, j_id);
+					t.start();
+					
+
+					putActiveThread(j_id, t);
+//					log.debug("activeThread==="+activeThread.toString());
+					NUMBER_OF_TRANSCODING++;
+			
+					// Thread를 시작한 후에 해당 작업을 진행상태('Inprogress')로 바꾼다.
+					// 변경하지 않으면 같은작업이 여러번 실행된다.
+					Map<String, Object> up_params = new HashMap();
+					up_params.put("j_id", j_id);
+					up_params.put("job_starttime", TcUtil.getCurrentTime());
+					up_params.put("job_status", "Inprogress");
+					up_params.put("job_progress", 0);
+					monitorDAO.update("monitor.updateStatus", up_params);
+
+				}
+			} else {
+				log.debug("No Transcoding Job.");
+			}
+		}
+	}
+	
+	// 완료한 머지 파일을 자동 트랜스코딩 등록(pooq전용 포맷)
+	@Scheduled(fixedDelay = 5000)
+	public void getJobForAutoTranscoding() {
+		int result = -1;
+		String source_path  ="";
+		String target_path  ="";
+		String bitrate      ="";
+		String p_id         ="";
+		String worker       ="";
+		String fileid       ="";
+		String filename     ="";
+		String merge_id     ="";
+		String ftp          ="";
+		
+		
+		MonitorDAO monitorDAO = MonitorDAO.getInstance();
+		ProfileDAO profileDAO = ProfileDAO.getInstance();
+		
+		List<Map<String,String>> oneTcJobAuto = null;
+		List<Map<String,String>> tcPormat = null;
+
+			try {
+				
+				// 와치폴더에 저장된 타겟 경로를 가져온다.
+				WatchfolderDAO wDAO = WatchfolderDAO.getInstance();
+				Map<String, Object> manual_folder = wDAO.selectWatchfolderOnlyManual();
+				source_path = (String) manual_folder.get("source_directory");
+				target_path = (String) manual_folder.get("target_directory");
+				
+				
+				//푹 전송용 포맷
+				tcPormat = profileDAO.selectProfilePooq();
+				oneTcJobAuto = monitorDAO.selectStanby();
+				
+			
+				
+			} catch (Exception e) {
+				log.error(e.getMessage());
+			}
+			
+			monitorDAO.beginBatch();
+			
+			if (oneTcJobAuto != null){ 
+		
+				for (Map<String, String> fileinfo : oneTcJobAuto) {
+
+					 filename = fileinfo.get("file_name");
+					 fileid   = fileinfo.get("file_path");    // path + name
+					 merge_id = fileinfo.get("j_id");
+					 ftp      = fileinfo.get("ftp");
+
+					for (Map<String, String> fileinfo2 : tcPormat) {
+					
+						 worker   = fileinfo2.get("worker");    // 확장자
+						 bitrate   = fileinfo2.get("bitrate");    // 확장자
+						 p_id     = fileinfo2.get("p_id");      // 선택한 프로파일 아이디
+						 
+						File source_file = new File(fileid);
+					
+											if (MediaFileFilter.isMediaFile(source_file)) {
+												String j_id = monitorController.insertTcJobAuto(monitorDAO.getSession(), source_file, source_path, target_path, worker, bitrate, p_id, merge_id, ftp);
+												log.debug("j_id===="+j_id);
+												if (j_id != null) {
+													result = 1;
+												}
+											}
+					}
+
+
+				}
+				
+				monitorDAO.commit();
+				
+			} else {
+				log.debug("No Auto Transcoding.");
+			}
+	}
+
+	// 머지 작업을 가져온다.
+	@Scheduled(fixedDelay = 5000)
+	public void getHoldOnJobForMerge() {
+
+		MonitorDAO monitorDAO = MonitorDAO.getInstance();
+
+		if (monitorDAO != null) {
+			Map<String, Object> params = new HashMap();
+			params.put("job_status", "Hold On");
+			params.put("j_type", "Merge");
+
+			Map<String, Object> oneOfMergeJob = null;
+			try {
+				oneOfMergeJob = (Map<String, Object>) monitorDAO.selectHoldOn(params);
+			} catch (Exception e) {
+				log.error(e.getMessage());
+			}
+
+			if (oneOfMergeJob != null) {
+				if (NUMBER_OF_MERGE < LIMIT_OF_MERGE) {
+					NUMBER_OF_MERGE++;
+					log.debug("Number of Merge Threads=" + NUMBER_OF_MERGE);
+
+					String j_id = (String) oneOfMergeJob.get("j_id");
+					String src_path = (String) oneOfMergeJob.get("src_path");
+					String src_list = (String) oneOfMergeJob.get("src_list");
+					String file_path = (String) oneOfMergeJob.get("file_path");
+					String file_type = (String) oneOfMergeJob.get("file_type");
+					String file_name = (String) oneOfMergeJob.get("file_name");
+					// String file_size = (String) oneOfTcJob.get("file_size");
+					// file_size = file_size.replace(",", "");
+					String job_option = (String) oneOfMergeJob.get("job_option");
+					String target_directory = (String) oneOfMergeJob.get("target_directory");
+
+					// 구분자 '|' 로 문자를 분리한다. Regular Expression이라 | 앞에 \\ 붙인다.
+					String[] src_files = src_list.split("\\|");
+					for (int i = 0; i < src_files.length; i++) {
+						src_files[i] = src_path + File.separatorChar + src_files[i]; 
+						//log.debug("Check, src_path[" + i + "]=" + src_files[i]);
+					}
+
+					if (file_type.equals("mts")) {
+						TsMergeProcessor job = new TsMergeProcessor();
+						job.setPara(j_id, src_files, file_path, file_type, file_name, job_option, target_directory);
+
+						Thread t = new Thread(job, j_id);
+						t.start();
+
+						putActiveThread(j_id, t);
+					} else {
+						MergeProcessor job = new MergeProcessor();
+						job.setPara(j_id, src_files, file_path, file_type, file_name, job_option, target_directory);
+
+						Thread t = new Thread(job, j_id);
+						t.start();
+
+						putActiveThread(j_id, t);
+					}
+
+					// Thread를 시작한 후에 해당 작업을 진행상태('Inprogress')로 바꾼다.
+					// 변경하지 않으면 같은작업이 여러번 실행된다.  
+					Map<String, Object> up_params = new HashMap();
+					up_params.put("j_id", j_id);
+					up_params.put("job_starttime", TcUtil.getCurrentTime());
+					up_params.put("job_status", "Inprogress");
+					up_params.put("job_progress", 0);
+					monitorDAO.update("monitor.updateStatus", up_params);
+				}
+			} else {
+				log.debug("No Merge Job.");
+			}
+		}
+	}
+
+	// 전송 작업을 가져온다.
+	@Scheduled(fixedDelay = 5000)
+	public void getHoldOnJobForTransferring() {
+
+//		String source_path  ="";
+//		String target_path  ="";
+		SendingDAO sendingdao = SendingDAO.getInstance();
+		
+		try {
+	
+			Map<String, Object> standbyList = sendingdao.selectStandby();
+			
+
+			
+			if (standbyList != null) {
+				if (NUMBER_OF_TRANSFERRING < LIMIT_OF_TRANSFERRING) {
+					
+					log.debug("Number of Transferring Threads=" + NUMBER_OF_TRANSFERRING);
+					log.debug("Number of TOTAL Threads=" + NUMBER_OF_TRANSCODING+NUMBER_OF_MERGE+NUMBER_OF_TRANSFERRING);
+	
+				    int       no =  (int)(long) standbyList.get("no");
+				    String channel = (String) standbyList.get("channel");
+					String sourcePath = (String) standbyList.get("source_path");
+					String targetPath = (String) standbyList.get("target_path");
+					String targetName = targetPath.substring(targetPath.lastIndexOf("/") + 1, targetPath.length());
+			
+				//TM 전송으로 변경할 때 주석처리해야할 부분 시작 
+					TransferProcessor job = new TransferProcessor();
+					job.setPara(no, channel, sourcePath, targetPath, targetName);
+					Thread t = new Thread(job);
+					t.start();
+
+					putActiveThread(Integer.toString(no), t);
+					NUMBER_OF_TRANSFERRING++;
+				//TM 전송으로 변경할 때 주석처리해야할 부분 끝 
+
+					// Thread를 시작한 후에 해당 작업을 진행상태('Inprogress')로 바꾼다.
+					// 변경하지 않으면 같은작업이 여러번 실행된다.  
+					Map<String, Object> up_params = new HashMap();
+					up_params.put("no", no);
+					up_params.put("start_date", TcUtil.getCurrentTime());
+					up_params.put("job_status", "Completed");
+					up_params.put("progress", 100);
+				//TM 전송으로 변경할 때 주석처리해야할 부분 시작 	
+					up_params.put("job_status", "Inprogress");
+					up_params.put("progress", 0);
+				//TM 전송으로 변경할 때 주석처리해야할 부분 끝 	
+					sendingdao.update("sending.updateStatus", up_params);
+					
+					
+				//TM을 통해 pooq 전송을 위한 경로 변경.
+//					String dest_path = "";
+//					if(targetName.indexOf("_") != -1){
+//						dest_path = "/"+targetName.substring(0 , targetName.indexOf("_"))+"/";  //linux
+//					}else{
+//						dest_path = "/"; 
+//					}
+					
+//					log.debug("dest_path=="+dest_path);
+					
+					//TM 파라미터 전송 시작
+//					HashMap hp = new HashMap();
+//					hp.put("job_name", "pooq sending");
+//					hp.put("job_rank", "3");
+//					hp.put("job_type", "Duplication");
+//					hp.put("mtrl_id", Integer.toString(no));
+//					hp.put("asset_id", Integer.toString(no));
+//					hp.put("mtrl_title", sourcePath.substring(sourcePath.lastIndexOf("/") + 1, sourcePath.length()));
+//					hp.put("source_device", "ftp_server3");
+//					hp.put("source_path", sourcePath.substring(0 , sourcePath.lastIndexOf("/")+1));
+//					hp.put("source_filename", sourcePath.substring(sourcePath.lastIndexOf("/") + 1, sourcePath.length()));
+//					hp.put("filesize", standbyList.get("file_size"));
+//					hp.put("dest_device", "pooq_ftp");
+//					hp.put("dest_path", dest_path);
+//					hp.put("dest_filename", targetName);
+//					String url = "http://10.1.7.85:8080/tmagent/rest/transfer/insertTransferJob";
+//					String rst = this.doPost(url,hp);
+//					log.debug("rst==="+rst);
+					//TM 파라미터 전송 끝
+				}
+				
+				
+			} else {
+				log.debug("No transferring Job.");
+			}
+			
+		} catch (Exception e) {
+			log.error(e.getMessage());
+		}
+		
+	}
+	
+	
+	// 트랜스코딩 완료 후 자동 파일 전송(pooq전용 포맷)
+	@Scheduled(fixedDelay = 5000)
+	public void getJobForAutoSending() {
+		
+		String file_path     ="";
+		String file_name     ="";
+		String j_id          ="";
+		String ftp_code      ="";
+		String target_path   ="";
+		
+		SendingDAO sendingDAO = SendingDAO.getInstance();
+		MonitorDAO monitorDAO = MonitorDAO.getInstance();
+		try{
+		
+			Map<String,String> oneOfSendingJob = null;
+			
+			oneOfSendingJob = monitorDAO.selectFtpAuto();
+				
+			sendingDAO.beginBatch();
+			
+				 if(oneOfSendingJob != null){
+			
+					 file_path = oneOfSendingJob.get("target_directory");
+					 file_name   = oneOfSendingJob.get("target_name");    // path + name
+					 j_id = oneOfSendingJob.get("j_id");
+					 ftp_code= oneOfSendingJob.get("ftp");
+					 
+//					 log.debug("ftp_code=="+ftp_code);
+					 //pooq용 targetpath
+					 target_path = "/"+file_name.substring(0, file_name.indexOf("_"));
+				
+					File source_file = new File(file_path+"/"+file_name);
+					
+//					log.debug("target_path==="+target_path);
+//					log.debug("source_file=="+source_file);
+					
+					if (MediaFileFilter.isMediaFile(source_file)) {
+						SendingController.insertFtpAuto(sendingDAO.getSession(), source_file, file_path, file_name,target_path, ftp_code, j_id);
+					}
+				
+					sendingDAO.commit();
+				 }else{
+				 log.debug("No Auto Sending.");
+				 }
+		} catch (Exception e) {
+			log.error(e.getMessage());
+		}
+						
+			
+	}
+	
+	// Thread 종료시 Type에 따라 해당 Thread의 Threshold 를 -1 한다.
+	public static void countDownProcessor(int type) {
+		switch (type) {
+		case TYPE_TRANSCODING:
+			NUMBER_OF_TRANSCODING--;
+			log.debug("Number of Transcoding Threads=" + NUMBER_OF_TRANSCODING);
+			break;
+		case TYPE_MERGE:
+			NUMBER_OF_MERGE--;
+			log.debug("Number of Merge Threads=" + NUMBER_OF_MERGE);
+			break;
+		case TYPE_TRANSFERRING:
+			NUMBER_OF_TRANSFERRING--;
+			log.debug("Number of Transferring Threads=" + NUMBER_OF_TRANSFERRING);
+			break;
+		}
+
+		// FFMpeg process의 cleanup을 위한 값 셋팅. 불필요한 process 정리작업.
+		if (NUMBER_OF_MERGE == 0 && NUMBER_OF_TRANSCODING == 0 && NUMBER_OF_TRANSFERRING == 0) {
+			System.currentTimeMillis();
+		} else {
+		}
+	}
+
+	// Mearge / Transcoding / Transferring 작업이 시작되면 'activeThread' hashtable에 값을 저장한다.
+	public static void putActiveThread(String j_id, Thread thread) {
+		activeThread.put(j_id, thread);
+		log.debug("thread input : j_id=" + j_id);
+	}
+	
+	// 해제한다.
+	public static void removeActiveThread(String j_id) {
+		log.debug("removeActiveThread : j_id=" + j_id);
+		activeThread.remove(j_id);
+	}
+
+	// Inprogress 인 Thread를 사용자가 취소했을 경우에 처리
+	public static void cancelActiveThread(String j_id, String j_type) {
+		Thread thread = (Thread) activeThread.get(j_id);
+
+		if (thread != null && thread.isAlive()) {
+			log.debug("Interrupts the '" + j_id + "(" + j_type + ")' thread.");
+			thread.interrupt();
+
+			if (j_type.equals("Transcoding") && NUMBER_OF_TRANSCODING > 0) {
+				NUMBER_OF_TRANSCODING--;
+				log.debug("NUMBER_OF_TRANSCODING=" + NUMBER_OF_TRANSCODING);
+				
+			// Transferring 경우 run()에서 미리 처리됨.
+//			} else if (j_type.equals("Transferring") && NUMBER_OF_TRANSFERRING > 0) {
+//				NUMBER_OF_TRANSFERRING--;
+//				log.debug("NUMBER_OF_TRANSFERRING=" + NUMBER_OF_TRANSFERRING);
+				
+			} else if (j_type.equals("Merge") && NUMBER_OF_MERGE > 0) {
+				NUMBER_OF_MERGE--;
+				log.debug("NUMBER_OF_MERGE=" + NUMBER_OF_MERGE);
+			}
+
+			try {
+				// Delay를 주지않을 경우, Thread가 끝날때 까지 무한정 기다리게 되어 1 min 을 줌
+				// 이후에도 정리가 안될경우 Cleanup 할때 정리됨.
+				log.debug("Wait for the '" + j_id + "' thread to die.");
+				thread.join(DELAY_1_MINUTE);
+			} catch (InterruptedException e) {
+				log.debug(e.getMessage());
+				e.printStackTrace();
+			}
+
+			log.debug("The '" + j_id + "(" + j_type + ")' canceled===.");
+			activeThread.remove(j_id);
+
+		}
+	}
+	
+    /**
+     * POST Data를 가지고 HTTP 통신을 한다.
+     * @param url 통신 URL
+     * @param parameterMap 전송할 HTTP Parameter
+     * @return
+     */
+    public static String doPost(String url, HashMap parameterMap) {
+        String result = "0";
+        
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        try {
+        	log.debug("******************** [HttpService doPost] start ********************");
+            
+            HttpPost httpPost = new HttpPost(url);
+            httpPost.addHeader("User-Agent", USER_AGENT);
+            
+            List<NameValuePair> urlParameters = new ArrayList<NameValuePair>();
+            if (parameterMap != null) {
+                Iterator<String> iterator = parameterMap.keySet().iterator();
+                while (iterator.hasNext()) {
+                    String key = (String) iterator.next();
+                    urlParameters.add(new BasicNameValuePair(key, (String) parameterMap.get(key)));
+                }  
+                log.debug("******************** [HttpService doPost] urlParameters[" + urlParameters + "]");
+            }
+            HttpEntity postParams = new UrlEncodedFormEntity(urlParameters);
+            httpPost.setEntity(postParams);
+            
+            CloseableHttpResponse httpResponse = httpClient.execute(httpPost);
+            
+            log.debug("******************** [HttpService doPost] Response Status [" + httpResponse.getStatusLine().getStatusCode() + "]");
+ 
+            String lineStr;
+            StringBuffer response = new StringBuffer();
+
+            BufferedReader responseBuffer = new BufferedReader(new InputStreamReader(httpResponse.getEntity().getContent()));
+            
+            while ((lineStr = responseBuffer.readLine()) != null) {
+                response.append(lineStr);
+            }
+            responseBuffer.close();
+
+            result = response.toString();
+
+            httpClient.close();
+            log.debug("******************** [HttpService doPost] Response result [" + result + "]");
+            log.debug("******************** [HttpService doPost] end ********************");
+            
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
+        return result;
+    }
+}

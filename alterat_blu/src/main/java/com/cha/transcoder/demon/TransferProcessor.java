@@ -1,0 +1,178 @@
+package com.cha.transcoder.demon;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.Hashtable;
+import java.util.HashMap;
+import java.util.Map;
+import org.apache.log4j.Logger;
+
+
+import com.cha.transcoder.common.TcUtil;
+import com.cha.transcoder.monitor.dao.MonitorDAO;
+import com.cha.transcoder.nps.SoapManager;
+import com.cha.transcoder.sending.dao.SendingDAO;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
+
+public class TransferProcessor extends GeneralProcessor implements Runnable, TcConstant {
+
+	private Logger log = Logger.getLogger(MergeProcessor.class);
+
+	private int no;
+	private String channel;
+	private String sourcePath;
+	private String targetPath;
+	private String targetName;
+
+
+	public TransferProcessor() {
+	}
+
+	public void setPara(int no, String channel,String sourcePath,String targetPath,String targetName) {
+		this.no = no;
+		this.channel = channel;
+		this.sourcePath = sourcePath;
+		this.targetPath = targetPath;
+		this.targetName = targetName;
+
+	
+	}
+	public void run() {
+			
+		try{
+			
+			  FTPClient ftp = null; // FTP Client 객체
+			  FileInputStream fis = null; // File Input Stream
+			 
+		
+			   SendingDAO sendingdao = SendingDAO.getInstance();
+			  
+				Map<String, Object> params = new HashMap();
+				params.put("channel", channel);
+				
+			  Map<String, Object> ftpinfo = sendingdao.selectFtpInfo(params);
+			  
+			  File sourcefile = new File(sourcePath); // File 객체 //cartalkshow_160713#2.mxf  sign_iptv_copy.mxf
+			  String address  = "";  
+			  String id  = "";
+			  String pwd  = ""; 
+			  String port = "";
+			  //targetpath에서 파일명과 경로 분리
+			  String target_path = targetPath.substring(0, targetPath.lastIndexOf("/"));
+			  String fileNm = targetPath.substring(targetPath.lastIndexOf("/")+1,targetPath.length());
+			  
+//			  log.debug("target_path=="+target_path);
+//			  log.debug("fileNm=="+fileNm);
+			  
+				if (ftpinfo != null) {
+					
+				     long      ftp_no = (long) ftpinfo.get("no");
+				     address =  (String)ftpinfo.get("address");
+					 id = (String)ftpinfo.get("id");
+					 pwd = (String)ftpinfo.get("pwd");
+					 port = (String)ftpinfo.get("ftp_port");
+				 
+//					 log.debug("address=="+address);
+//					 log.debug("id=="+id);
+//					 log.debug("pwd=="+pwd);
+//					 log.debug("port=="+port);
+					 
+					 
+				}
+				
+				  ftp = new FTPClient(); // FTP Client 객체 생성
+			      ftp.setControlEncoding("UTF-8"); // 문자 코드를 UTF-8로 인코딩
+			      ftp.connect(address, Integer.parseInt(port)); // 서버접속 " "안에 서버 주소 입력 또는 "서버주소", 포트번호
+			      ftp.login(id, pwd); // FTP ID, PASSWORLD
+			      ftp.enterLocalPassiveMode(); // Passive Mode 접속일때 
+			      ftp.setFileType(FTP.BINARY_FILE_TYPE); // 업로드 파일 타입 셋팅
+			      
+			      target_path = target_path.replace("/", "");  
+			      
+			      boolean chkFolder = ftp.changeWorkingDirectory(target_path); // target 디렉토리 변경
+			      if (!chkFolder) {
+		            log.debug("target directory is not exist.");
+		            ftp.makeDirectory(target_path);
+		            ftp.changeWorkingDirectory(target_path);
+			      }
+			
+	
+			      fis = new FileInputStream(sourcefile); // 업로드할 File 생성
+		          OutputStream os = ftp.storeFileStream(fileNm); // File 업로드
+	    	  try{
+			          byte[] buffer = new byte[1048576];
+			          int len;
+			          int p = fis.available();
+			          int c = 0;
+			          while ((len = fis.read(buffer)) != -1)
+			          {
+			              os.write(buffer, 0, len);
+			              os.flush();
+			              
+			              c += len;
+			              int percent = (int)(((double)c/(double)p) * 100);
+			              
+			              Map<String, Object> up_params = new HashMap();
+							if (percent < 0 || percent > 100 ) {
+								percent = 99;
+							}
+							
+							up_params.put("no", no);
+							up_params.put("progress", Integer.toString(percent));
+							sendingdao.updateprogress(up_params);
+							log.debug("no=="+no+" sending : "+percent+" %");
+							
+							Thread.sleep(WAITING_TIME_FOR_INTERRUPT);
+			          }
+				}catch(InterruptedException e){
+					log.error(e.getMessage());
+				}
+		          fis.close();
+		          os.close();
+		          
+		          boolean completed = ftp.completePendingCommand();
+		            if (completed) {
+		            	
+		               Map<String, Object> up_params = new HashMap();
+						up_params.put("no", no);
+						up_params.put("status", "Completed");
+						up_params.put("progress", "100");
+						sendingdao.updatejobstatus(up_params);
+		   								
+		                log.debug("no=="+no+" status : Completed ");
+		            }
+		            ftp.logout(); // FTP Log Out
+		    		ScheduledJobRunner.countDownProcessor(TYPE_TRANSFERRING);
+//		    		ScheduledJobRunner.removeActiveThread(Integer.toString(no));
+		            if (ftp != null && ftp.isConnected()){
+				          try{
+				              ftp.disconnect(); // 접속 끊기
+				          
+				          }catch (IOException e){
+				        	  log.debug("IO Exception : " + e.getMessage());
+				          }
+		
+		            }
+
+	
+		}catch(Exception e){
+			log.error(e.getMessage());
+		}
+
+	}
+	
+	
+
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title></title>
+<link rel="stylesheet" href="css/tc.css">
+</head>
+
+<body class="bg_color">
+	<div class="section_wrap_l">
+    	<!-- 상단 메뉴 영역 -->
+    	<script type="text/javascript" src="script/top.js"></script>
+    	<!--// 상단 메뉴 영역 -->
+    	<div class="left_list">
+            <img src="images/profile_list_tit.jpg">
+            <ul>
+                <li><a href="#">Avid</a></li>
+                <li><a href="#">Closed Caption Extract</a></li>
+                <li><a href="#">Delivery</a></li>
+                <li><a href="#">DivX</a></li>
+                <li><a href="#">Div</a></li>
+                <li><a href="#">Flash 8</a></li>
+                <li><a href="#">Grass Valley</a></li>
+                <li><a href="#">H. 264</a></li>
+            </ul>
+        </div>
+        <div class="right_wrap">
+            <div class="right_con">
+            	<table>
+                	<col width="200"><col width="200"><col width="100"><col width="295"><col width="290">
+                	<tr>
+                    	<th>ID</th>
+                        <th>Name</th>
+                        <th>Enable</th>
+                        <th>Video</th>
+                        <th>Audio</th>
+                    </tr>
+                    <tr>
+                    	<td class="tl"><a href="#">P201509190001</a></td>
+                        <td><a href="#">MXF Standard</a></td>
+                        <td><a href="#">Y</a></td>
+                        <td><a href="#"><strong style="color:#FC0;">-r 29.97 -f mxf -vcodec mpeg2video -files +lime*idct -qscale:v 2 -g 15 keyint_min 15 1920x1000 -pix_fmt yuv422p -b:v50000000 -minrate 50000000 -maxrate 50000000</strong></a></td>
+                        <td><a href="#"><strong style="color:#FC0;">-r 29.97 -f mxf -vcodec mpeg2video -files +lime*idct -qscale:v 2 -g 15 keyint_min 15 1920x1000 -pix_fmt yuv422p -b:v50000000 -minrate 50000000 -maxrate 50000000</strong></a></td>
+                    </tr>
+                    <tr>
+                    	<td class="tl"><a href="#">P201509190001</a></td>
+                        <td><a href="#">MXF Standard</a></td>
+                        <td><a href="#">Y</a></td>
+                        <td><a href="#"><strong style="color:#FC0;">-r 29.97 -f mxf -vcodec mpeg2video -files +lime*idct -qscale:v 2 -g 15 keyint_min 15 1920x1000 -pix_fmt yuv422p -b:v50000000 -minrate 50000000 -maxrate 50000000</strong></a></td>
+                        <td><a href="#"><strong style="color:#FC0;">-r 29.97 -f mxf -vcodec mpeg2video -files +lime*idct -qscale:v 2 -g 15 keyint_min 15 1920x1000 -pix_fmt yuv422p -b:v50000000 -minrate 50000000 -maxrate 50000000</strong></a></td>
+                    </tr>
+                    <tr>
+                    	<td colspan="5" style="border:none;">
+                        	 <div class="btn_add"><a href="#">ADD</a></div>
+                        </td>
+                    </tr>
+                </table>
+               
+            </div>
+        </div>
+    </div>
+    <div class="footer_wrap">
+        <img src="images/footer_text.png">
+    </div>
+</body>
+</html>

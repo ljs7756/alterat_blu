@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MAC -->
+<!-- <beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"  -->
+<!-- 	xmlns:context="http://www.springframework.org/schema/context" xsi:schemaLocation="http://www.springframework.org/schema/beans  -->
+<!-- 	file:///usr/local/tomcat8/webapps/alterat/schema/spring-beans-4.2.xsd http://www.springframework.org/schema/context  -->
+<!-- 	file:///usr/local/tomcat8/webapps/alterat/schema/spring-context-4.2.xsd"> -->
+
+<!-- Local -->
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.2.xsd
+                        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.2.xsd">
+
+
+	<!-- Windows --> <!-- 배포시 id를 수정해야함 :::: Not_Used_alteratConfig 로 수정 -->
+	<bean id="alteratConfig" class="com.cha.transcoder.common.AlteratConfig">
+		<property name="ffprobe" value="D:/ffmpeg/win64/bin/ffprobe.exe" />
+		<property name="ffmpeg" value="D:/ffmpeg/win64/bin/ffmpeg.exe" />
+		<property name="ffmpeg_home" value="D:/ffmpeg/win64/bin/" />
+		<property name="window" value="true" />
+
+		<property name="in_base_drive" value="D:/temp3/" />
+		<property name="in_base_folder" value="D:/temp3/" />
+
+		<property name="dest_dir" value="D:/temp3/" />
+	</bean>
+
+	<!-- MAC --> <!-- 배포시 id를 수정해야함 :::: alteratConfig 으로 수정 -->
+	<bean id="Not_Used_alteratConfig_0" class="com.cha.transcoder.common.AlteratConfig">
+		<property name="ffprobe" value="/usr/local/ffmpeg/ffprobe" />
+		<property name="ffmpeg" value="/usr/local/ffmpeg/ffmpeg" />
+		<property name="ffmpeg_home" value="/usr/local/ffmpeg" />
+		<property name="window" value="false" />
+
+		<property name="in_base_drive" value="/usr/local/data" />
+		<property name="in_base_folder" value="/usr/local/data/in" />
+
+		<property name="dest_dir" value="/Volumes/Product_Main/CMS/" />
+	</bean>
+
+	<!-- Linux -->
+	<bean id="Not_Used_alteratConfig_2" class="com.cha.transcoder.common.AlteratConfig">
+		<property name="ffprobe" value="/root/ffmpeg/ffprobe" />
+		<property name="ffmpeg" value="/root/ffmpeg/ffmpeg" />
+		<property name="ffmpeg_home" value="/root/ffmpeg" />
+		<property name="window" value="false" />
+		
+
+		<property name="in_base_drive" value="/usr/local/data" />
+		<property name="in_base_folder" value="/usr/local/data/in" />
+
+		<property name="dest_dir" value="/usr/local/data/" />
+	</bean>
+
+	<!-- NPS 등록시 SOAP 통신과 관련된 부분 설정 -->
+	<bean id="alteratConfigForSOAP" class="com.cha.transcoder.common.AlteratConfigForSOAP">
+		<property name="soap_server_url"
+			value="http://cms.ddmc.com/interface/app/common.php?wsdl" />
+		<property name="soap_server_function_insertMetadata" value="insertMetadata" />
+		<property name="soap_server_function_getContentList" value="getContentList" />
+		<property name="soap_server_function_login" value="login" />
+		<property name="soap_server_user_id" value="D0807246" />
+	</bean>
+</beans>

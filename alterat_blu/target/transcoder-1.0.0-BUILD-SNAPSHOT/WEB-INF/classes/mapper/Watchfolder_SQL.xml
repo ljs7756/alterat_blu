@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="watchfolder">
+	<select id="selectWatchfolderOnlyManual" parameterType="hashmap"
+		resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                w_id,
+                w_name,
+                worker,
+                enable_yn,
+                manual_yn,
+                source_directory,
+                target_directory,
+                method,
+                regdate,
+                moddate
+            FROM
+                tb_watchfolder
+            WHERE
+                enable_yn = 'N'
+            AND 
+                manual_yn = 'Y'
+            ORDER BY regdate desc
+            LIMIT 0, 1
+        ]]>
+	</select>
+	
+	   <select id="selectWatchfolder" parameterType="hashmap"
+        resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                w_id,
+                w_name,
+                worker,
+                enable_yn,
+                manual_yn,
+                source_directory,
+                target_directory,
+                method,
+                regdate,
+                moddate
+            FROM
+                tb_watchfolder
+            ORDER BY regdate desc
+            LIMIT ${off_set}, ${page_count}
+        ]]>
+    </select>
+
+	<select id="selectWatchfolderDetail" parameterType="hashmap"
+		resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                w_id,
+                w_name,
+                worker,
+                enable_yn,
+                manual_yn,
+                source_directory,
+                target_directory,
+                method,
+                regdate,
+                moddate
+            FROM
+                tb_watchfolder
+            WHERE
+                w_id = #{w_id}
+        ]]>
+	</select>
+
+	<select id="selectEnableList" parameterType="hashmap"
+		resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                w_id,
+                w_name,
+                worker,
+                enable_yn,
+                manual_yn,
+                source_directory,
+                target_directory,
+                method,
+                regdate,
+                moddate
+            FROM
+                tb_watchfolder
+            WHERE
+                enable_yn = #{enable_yn}
+        ]]>
+	</select>
+
+	<select id="selectPID" parameterType="hashmap" resultType="java.lang.String">
+        <![CDATA[
+            SELECT 
+                w_id
+            FROM
+                tb_watchfolder
+            WHERE
+                w_id = (SELECT 
+                        MAX(w_id)
+                    FROM
+                        tb_watchfolder
+                    WHERE
+                        DATE_FORMAT(regdate, '%Y%m%e') = DATE_FORMAT(NOW(), '%Y%m%e'))
+        ]]>
+	</select>
+
+	<select id="selectTargetDirectory" parameterType="hashmap"
+		resultType="hashmap">
+        <![CDATA[
+            SELECT 
+                source_directory,
+                target_directory
+            FROM
+                tb_watchfolder
+            WHERE
+                enable_yn = 'Y'
+        ]]>
+	</select>
+
+	<select id="selectWatchfolderCountAll" parameterType="hashmap"
+		resultType="java.lang.Integer">
+        <![CDATA[
+            SELECT 
+                count(*) as tot_cnt
+            FROM
+                tb_watchfolder
+        ]]>
+	</select>
+
+	<insert id="insertWatchfolder" parameterType="hashmap">
+        <![CDATA[
+            INSERT INTO tb_watchfolder (
+                w_id,
+                w_name,
+                worker,
+                enable_yn,
+                manual_yn,
+                source_directory,
+                target_directory,
+                method,
+                regdate)
+            VALUES (
+                #{w_id},
+                #{w_name},
+                #{worker},
+                #{enable_yn},
+                #{manual_yn},  
+                #{source_directory},
+                #{target_directory},
+                #{method},
+                NOW()
+            )
+        ]]>
+	</insert>
+
+	<update id="updateWatchfolder" parameterType="hashmap">
+        <![CDATA[
+            UPDATE tb_watchfolder 
+            SET 
+                w_name = #{w_name},
+                worker = #{worker},
+                enable_yn = #{enable_yn},
+                manual_yn = #{manual_yn},  
+                source_directory = #{source_directory}, 
+                target_directory = #{target_directory},
+                method = #{method},
+                moddate = NOW()
+            WHERE
+                w_id = #{w_id};
+        ]]>
+	</update>
+
+	<delete id="deleteWatchfolder" parameterType="hashmap">
+        <![CDATA[
+            DELETE FROM tb_watchfolder
+            WHERE
+                w_id = #{w_id};
+        ]]>
+	</delete>
+</mapper>
+

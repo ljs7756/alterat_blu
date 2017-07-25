@@ -1,0 +1,234 @@
+package com.cha.transcoder.nps;
+
+import java.io.File;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.log4j.Logger;
+import com.cha.transcoder.common.AlteratConfig;
+import com.cha.transcoder.common.AlteratConfigLoader;
+
+public class FileUtils {
+
+	private Logger log = Logger.getLogger(FileUtils.class);
+
+	private String base_driver;
+
+	private final String JQX_JSON_LOADING = "Loading...";
+	private final String JQX_JSON_LABEL = "label";
+	private final String JQX_JSON_VALUE = "value";
+	private final String JQX_JSON_ITEMS = "items";
+	private final String JQX_JSON_EXPAN = "expanded";
+	private final String JQX_JSON_ICON = "icon";
+	//private final String JQX_JSON_DIRPATH = "/nps/directoryList.do?folder=";
+	private final String JQX_JSON_DIRURL = "/nps/subDirectory.do";
+
+	private static NumericComparator numericComparator = new NumericComparator();
+
+	public FileUtils() {
+		AlteratConfig config = AlteratConfigLoader.getInstance().getConfig();
+		base_driver = config.getIn_base_drive();
+	}
+
+	public HashMap<String, Object> getDirectory(String directory) {
+		return this.getDirectory(directory, 1);
+	}
+
+	/**
+	 * jqxTree 디렉토리의 1단계 JSON 데이터 생성
+	 * 
+	 * @param directory
+	 * @param depth
+	 * @return
+	 */
+	public HashMap<String, Object> getDirectory(String directory, int depth) {
+		HashMap<String, Object> directoryHashMap = new HashMap<String, Object>();
+		log.debug("base_driver [" + base_driver + "]");
+		log.debug("directory [" + directory + "]");
+
+		File file = new File(directory);
+		File[] fileList = file.listFiles();
+
+		List<HashMap> dirList = new ArrayList<HashMap>();
+		for (File f : fileList) {
+			if (f.isDirectory()) { // 디렉토리 리스트 나열 
+				//log.debug("directory [" + f.getName() + "]");
+			
+				// 경로 셋팅
+				HashMap<String, String> pathMap = new HashMap<String, String>();
+				List<HashMap> pathList = new ArrayList<HashMap>();
+
+				//pathMap.put(JQX_JSON_VALUE, JQX_JSON_DIRPATH + f.getName());
+				pathMap.put(JQX_JSON_VALUE, JQX_JSON_DIRURL);
+				pathMap.put(JQX_JSON_LABEL, JQX_JSON_LOADING); // { "value": "/nps/directoryList.do?folder=", "label": "Loading..." }
+				pathList.add(pathMap); // [{ "value": "/nps/directoryList.do?folder=", "label": "Loading..." }]
+
+				HashMap<String, Object> dirnameMap = new HashMap<String, Object>();
+				dirnameMap.put(JQX_JSON_VALUE, f.getAbsolutePath()); // { "label": "Root Folder 1", "items": [{ "value": "ajax1.htm", "label": "Loading..." }] }
+				dirnameMap.put(JQX_JSON_ITEMS, pathList); // { "label": "Root Folder 1", "items": [{ "value": "ajax1.htm", "label": "Loading..." }] }
+				dirnameMap.put(JQX_JSON_ICON, "/images/jqwidget/images/folder.png"); // { "label": "Root Folder 1", "items": [{ "value": "ajax1.htm", "label": "Loading..." }] }
+				dirnameMap.put(JQX_JSON_LABEL, f.getName());
+
+				dirList.add(dirnameMap);
+			}
+		}
+		if (depth == 1) {
+			directoryHashMap.put(JQX_JSON_VALUE, base_driver);
+			directoryHashMap.put(JQX_JSON_EXPAN, "true");
+			directoryHashMap.put(JQX_JSON_LABEL, base_driver);
+			directoryHashMap.put(JQX_JSON_ITEMS, dirList);
+		} else {
+
+		}
+		return directoryHashMap;
+	}
+
+	/**
+	 * jqxTree 디렉토리의 2단계이후의 JSON 데이터 생성
+	 * 
+	 * @param directory
+	 * @param depth
+	 * @return
+	 */
+	public List<HashMap> getSubDirectory(String directory, int depth) {
+
+		log.debug("base_driver [" + base_driver + "]");
+		log.debug("directory [" + directory + "]");
+
+		File file = new File(directory);
+		File[] fileList = file.listFiles();
+
+		List<HashMap> dirList = new ArrayList<HashMap>();
+		for (File f : fileList) {
+			if (f.isDirectory()) { // 디렉토리 리스트 나열 
+				//log.debug("directory [" + f.getName() + "]");
+				// 경로 셋팅
+				HashMap<String, String> pathMap = new HashMap<String, String>();
+				List<HashMap> pathList = new ArrayList<HashMap>();
+
+				//pathMap.put(JQX_JSON_VALUE, JQX_JSON_DIRPATH + f.getName());
+				pathMap.put(JQX_JSON_VALUE, JQX_JSON_DIRURL);
+				pathMap.put(JQX_JSON_LABEL, JQX_JSON_LOADING); // { "value": "/nps/directoryList.do?folder=", "label": "Loading..." }
+				pathList.add(pathMap); // [{ "value": "/nps/directoryList.do?folder=", "label": "Loading..." }]
+
+				HashMap<String, Object> dirnameMap = new HashMap<String, Object>();
+				dirnameMap.put(JQX_JSON_VALUE, f.getAbsolutePath()); // { "label": "Root Folder 1", "items": [{ "value": "ajax1.htm", "label": "Loading..." }] }
+				dirnameMap.put(JQX_JSON_ITEMS, pathList); // { "label": "Root Folder 1", "items": [{ "value": "ajax1.htm", "label": "Loading..." }] }
+				dirnameMap.put(JQX_JSON_ICON, "/images/jqwidget/images/folder.png"); // { "label": "Root Folder 1", "items": [{ "value": "ajax1.htm", "label": "Loading..." }] }
+				dirnameMap.put(JQX_JSON_LABEL, f.getName());
+
+				dirList.add(dirnameMap);
+			}
+		}
+		return dirList;
+	}
+
+	/**
+	 * 폴더의 파일 리스트를 전달
+	 * 
+	 * @param directory
+	 * @return
+	 */
+	public List<HashMap> getFile(String directory) {
+
+		log.debug("directory=" + directory);
+
+		File file = new File(directory);
+		File[] fileList = file.listFiles(new MediaFileFilter()); // 미디어파일만 가져온다.
+
+		// 파일명에 붙은 숫자기준으로 정렬한다.
+		Arrays.sort(fileList, numericComparator);
+
+		List<HashMap> dirList = new ArrayList<HashMap>();
+
+		NumberFormat nf = NumberFormat.getInstance();
+		NumericComparator nc = new  NumericComparator();
+
+		for (File f : fileList) {
+			if (f.isFile()) {
+				HashMap<String, Object> fileMap = new HashMap<String, Object>();
+			
+				String size = nc.getFilelen(f.length());
+				
+				//파일 수정날짜 구하기
+				long dt = f.lastModified();
+				Date date = new Date(dt);
+				SimpleDateFormat sfd = new SimpleDateFormat("yyyy/MM/dd hh:mm:ss");
+			
+//				log.debug("date=="+sfd.format(date));
+				fileMap.put("fileid", f.getAbsolutePath());
+				fileMap.put("selected", false);
+				fileMap.put("filedate", sfd.format(date));
+				fileMap.put("filename", f.getName());
+				fileMap.put("filesize", size);
+				fileMap.put("transcoding", "50");
+				fileMap.put("transfering", "100");
+
+				dirList.add(fileMap);
+			}
+		}
+		return dirList;
+	}
+
+	public String getExtension(StringBuffer filename) {
+		String name = filename.toString();
+		return name.substring(name.lastIndexOf(".") + 1, name.length());
+	}
+
+}
+
+// 파일을 뒤에 붙은 숫자 순으로 오더링 하기 위한 클래스
+class NumericComparator implements Comparator {
+	Logger log = Logger.getLogger(FileUtils.class);
+
+	@Override
+	public int compare(Object file_1, Object file_2) {
+		String f1_name = ((File) file_1).getName();
+		String f2_name = ((File) file_2).getName();
+
+		long num_1 = extractNumber(f1_name);
+		long num_2 = extractNumber(f2_name);
+
+		long substrc = num_1 - num_2;
+
+		return (int) (substrc);
+	}
+
+	// 파일이름중 확장자 아래 숫자 부분만 추출한다.
+	private long extractNumber(String name) {
+		long num = 0;
+		Pattern p = Pattern.compile("\\d+[.]");
+		Matcher m = p.matcher(name);
+
+		if (m.find()) {
+			String onlyNum = m.group();
+			onlyNum = onlyNum.substring(0, onlyNum.length() - 1);
+
+			try {
+				num = Long.parseLong(onlyNum);
+			} catch (Exception e) {
+				log.error(e.getMessage());
+			}
+		}
+		return num;
+	}
+	
+	//파일 크기 포맷
+	public String getFilelen(long size)
+	   {
+	    if(size <= 0) return "0";
+	    final String[] units = new String[] { "B", "kB", "MB", "GB", "TB" };
+	    int digitGroups = (int) (Math.log10(size)/Math.log10(1024));
+	    return new DecimalFormat("#,##0.#").format(size/Math.pow(1024, digitGroups)) + " " + units[digitGroups];
+	}
+
+}

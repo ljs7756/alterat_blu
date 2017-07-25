@@ -1,0 +1,278 @@
+package com.cha.transcoder.nps.service;
+
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import javax.annotation.Resource;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.cha.transcoder.common.AlteratConfigLoader;
+import com.cha.transcoder.common.AlteratConfig;
+import com.cha.transcoder.monitor.control.MonitorController;
+import com.cha.transcoder.monitor.dao.MonitorDAO;
+import com.cha.transcoder.monitor.service.MonitorService;
+import com.cha.transcoder.nps.FileUtils;
+import com.cha.transcoder.nps.MediaFileFilter;
+import com.cha.transcoder.nps.SoapManager;
+import com.cha.transcoder.nps.dao.RegisterDAO;
+import com.cha.transcoder.profile.dao.ProfileDAO;
+import com.cha.transcoder.watchfolder.dao.WatchfolderDAO;
+
+@Service("registerService")
+public class RegisterServiceImpl implements RegisterService {
+
+	Logger log = Logger.getLogger(RegisterServiceImpl.class);
+
+	@Resource(name = "registerDAO")
+	RegisterDAO registerDAO;
+
+	@Resource(name = "monitorService")
+	private MonitorService monitorService;
+
+	@Resource(name = "monitorController")
+	private MonitorController monitorController;
+
+	@Autowired
+	MonitorDAO monitorDAO;
+
+	@Autowired
+	ProfileDAO profileDAO;
+
+	@Autowired
+	SoapManager soapManager;
+
+	@Autowired
+	FileUtils fileutil;
+
+	private String newPID = null;
+
+	// 임시로 정보를 저장한다.
+	private Vector vctTempInfo = new Vector();
+
+	// 트랜스코딩 작업을 등록한다.
+	public int registerTranscoding(List<Map<String, String>> fileList) {
+		int result = -1;
+		String g_id = null;
+		try {
+			log.debug("\n\n******************************* registerTranscoding start ****************************************");
+
+			newPID = null;
+			Date current = Calendar.getInstance().getTime();
+			SimpleDateFormat sdf_gid = new SimpleDateFormat("yyyyMMddHHmmssSSS");
+			String random_g_id = sdf_gid.format(current);
+			g_id = "G" + random_g_id;
+
+			// 와치폴더에 저장된 타겟 경로를 가져온다.
+			WatchfolderDAO wDAO = WatchfolderDAO.getInstance();
+			Map<String, Object> manual_folder = wDAO.selectWatchfolderOnlyManual();
+			String source_path = (String) manual_folder.get("source_directory");
+			String target_path = (String) manual_folder.get("target_directory");
+
+			monitorDAO.beginBatch();
+
+			// 트랜스코딩 먼저 등록
+			int count = 0;
+
+			for (Map<String, String> fileinfo : fileList) {
+
+				String filename = fileinfo.get("filename");
+				String fileid   = fileinfo.get("fileid");    // path + name
+				String worker   = fileinfo.get("worker");    // 확장자
+				String bitrate   = fileinfo.get("bitrate");    // 확장자
+				String p_id     = fileinfo.get("p_id");      // 선택한 프로파일 아이디
+
+				File source_file = new File(fileid);
+				
+
+				if (MediaFileFilter.isMediaFile(source_file)) {
+					String j_id = monitorController.insertTcJob_2(monitorDAO.getSession(), source_file, source_path, target_path, worker, bitrate, p_id);
+
+					if (j_id != null) {
+						result = 1;
+					}
+				}
+
+				count++;
+			}
+
+			monitorDAO.commit();
+
+			// 위 트랜젝션 떄문에 DB에 모두 인서트 한 이후에 아래 메시지 보내는 작업을 한다.
+//			Thread trdSender = new Thread(new SoapMessageSender(vctTempInfo));
+//			trdSender.start();
+
+			log.debug("\n******************************* registerTranscoding end ****************************************\n\n");
+		} catch (Exception e) {
+			monitorDAO.rollback();
+
+			result = -1;
+			log.error(e.getMessage());
+			e.printStackTrace();
+		}
+		return result;
+	}
+
+	/**
+	 * Muxing 작업을 등록한다.
+	 */
+	public int registerMuxing(List<Map<String, String>> fileList, String ftpYn) {
+		int result = -1;
+		try {
+			log.debug("\n\n******************************* registMuxing start ****************************************");
+			Map<String, Object> paramMap = new HashMap();
+			newPID = null;
+			String file_type = null;
+			String file_folder = null;
+
+			String src_path = null;
+			StringBuffer filelist = new StringBuffer();
+
+			int count = 1;
+			for (Map<String, String> fileinfo : fileList) {
+				File file = new File(fileinfo.get("fileid"));
+				if (file.canRead()) {
+					file_folder = file.getParent();
+					
+					String full_path = fileinfo.get("fileid");  
+					filelist.append(full_path.substring(full_path.lastIndexOf(File.separatorChar) + 1));
+					
+					//log.debug("Check, filelist.toString()=" + filelist.toString());
+					
+					if (count < fileList.size()) {
+						filelist.append("|");
+					}
+
+					if (src_path == null) {
+						full_path = fileinfo.get("fileid");
+						//log.debug("Check, full_path =" + full_path);
+
+						src_path = full_path.substring(0, full_path.lastIndexOf(File.separatorChar));
+
+						//log.debug("Check, src_path=" + src_path);
+					}
+
+					count++;
+				}
+			}
+
+			file_type = fileutil.getExtension(filelist);
+
+//			log.debug("filelist[" + filelist.toString() + "]");
+//			log.debug("file_type[" + file_type + "]");
+			
+			//pooq ftp 자동 전송여부
+			String ftp = "";
+			if(ftpYn.equals("Y")){
+				ftp = "pooq";
+			}
+			
+			paramMap.put("j_type", "Merge");
+			paramMap.put("src_path", src_path);
+			paramMap.put("src_list", filelist.toString());
+			paramMap.put("file_path", file_folder); // UI 에서 입력받은 Destination 폴더
+			paramMap.put("file_type", file_type.toLowerCase());
+			// source_files.txt 파일은 src_list 에 의해 ffmpeg 실행시 만드는 파일임
+			paramMap.put("job_option", "-f concat -safe 0 -i source_files.txt -vcodec copy -acodec copy");
+			paramMap.put("job_status", "Hold On");
+			paramMap.put("ftp", ftp);
+
+			String j_id = monitorService.insert(paramMap);
+			log.debug("j_id=" + j_id);
+			log.debug("paramMap[" + paramMap + "]");
+
+			log.debug("\n******************************* registMuxing end ****************************************\n\n");
+		} catch (Exception e) {
+			result = -1;
+			log.debug("registMuxing Exception[" + e.getMessage() + "]");
+			e.printStackTrace();
+		}
+		return result;
+	}
+
+	public void deleteAll() throws Exception {
+		registerDAO.deleteAll();
+	}
+
+	// 임시로 저장하는 클래스임
+	private class TempInfo {
+
+		boolean isGroup;
+		String g_id;
+		String j_id;
+		String target_file;
+		String file_size;
+
+		public TempInfo(boolean isGroup, String g_id, String j_id, String target_file, String file_size) {
+			super();
+			this.isGroup = isGroup;
+			this.g_id = g_id;
+			this.j_id = j_id;
+			this.target_file = target_file;
+			this.file_size = file_size;
+		}
+
+		public boolean isGroup() {
+			return isGroup;
+		}
+
+		public String getG_id() {
+			return g_id;
+		}
+
+		public String getJ_id() {
+			return j_id;
+		}
+
+		public String getTarget_file() {
+			return target_file;
+		}
+
+		public String getFile_size() {
+			return file_size;
+		}
+
+		@Override
+		public String toString() {
+			return "TempInfo [isGroup=" + isGroup + ", g_id=" + g_id + ", j_id=" + j_id + ", target_file=" + target_file + ", file_size=" + file_size
+					+ "]";
+		}
+	}
+
+	private class SoapMessageSender implements Runnable {
+
+		Logger log = Logger.getLogger(SoapMessageSender.class);
+		private Vector vctTempInfo;
+
+		public SoapMessageSender(Vector vctTempInfo) {
+			this.vctTempInfo = vctTempInfo;
+		}
+
+		public void run() {
+
+			for (int i = 0; i < vctTempInfo.size(); i++) {
+
+				TempInfo tempInfo = (TempInfo) vctTempInfo.elementAt(i);
+
+				log.debug("tempInfo=" + tempInfo.toString());
+				SoapManager.getInstance().registerMetadata(tempInfo.isGroup(), tempInfo.getG_id(), tempInfo.getJ_id(), tempInfo.getTarget_file(),
+						tempInfo.getFile_size());
+
+				try {
+					Thread.sleep(3 * 1000);
+				} catch (InterruptedException e) {
+					log.error(e.getMessage());
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+}
