@@ -104,7 +104,7 @@ public class ScheduledJobRunner implements TcConstant {
 					
 
 					TcJobProcessor job = new TcJobProcessor();
-					job.setPara(j_id, file_path, file_type, file_name, file_size, job_option, target_directory, target_type, bitrate);
+					job.setPara(j_id, file_path, file_type, file_name, file_size, job_option, target_directory, target_type, bitrate, target_name);
 					Thread t = new Thread(job, j_id);
 					t.start();
 					

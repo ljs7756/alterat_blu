@@ -440,7 +440,7 @@ public class MonitorController extends GeneralProcessor {
 	 * 트랜스코딩 작업을 등록하고, J_ID 를 리턴한다.
 	 * 
 	 */
-	public String insertTcJob_2(SqlSession session, File source_file, String source_path, String target_path, String worker, String bitrate, String p_id) {
+	public String insertTcJob_2(SqlSession session, File source_file, String source_path, String target_path, String worker, String bitrate, String p_id, String nowDate) {
 	
 		log.debug("source=" + source_file.toPath() + ", execute=" + source_file.canExecute() + ", read=" + source_file.canRead() + ", write="
 				+ source_file.canWrite() + ", isDir=" + source_file.isDirectory());
@@ -500,7 +500,7 @@ public class MonitorController extends GeneralProcessor {
 					// -----------------------------------------------------------
 					String file_name = source_file.getName();
 					String file_type = file_name.substring(file_name.lastIndexOf(".") + 1);
-					String target_name = file_name.substring(0,file_name.lastIndexOf(".")) +"_"+bitrate+"." + worker;
+					String target_name = file_name.substring(0,file_name.lastIndexOf(".")) +"_"+nowDate+"." + worker;
 					file_type = file_type.toLowerCase();
 					params.put("file_path", source_file.getPath());
 					params.put("file_type", file_type);

@@ -33,12 +33,13 @@ public class TcJobProcessor extends GeneralProcessor implements Runnable, TcCons
 	private String target_directory = null;
 	private String target_type = null;
 	private String bitrate = null;
+	private String target_name = null;
 
 	public TcJobProcessor() {
 	}
 
 	public void setPara(String job_id, String file_path, String file_type, String file_name, String file_size, String job_option,
-			String target_directory, String target_type, String bitrate) {
+			String target_directory, String target_type, String bitrate, String target_name) {
 
 		this.job_id = job_id;
 		this.src_file = file_path;
@@ -48,7 +49,7 @@ public class TcJobProcessor extends GeneralProcessor implements Runnable, TcCons
 		this.target_directory = target_directory;
 		this.target_type = target_type;
 		this.bitrate = bitrate;
-		
+		this.target_name = target_name;
 	}
 
 	public void run() {
@@ -96,7 +97,7 @@ public class TcJobProcessor extends GeneralProcessor implements Runnable, TcCons
 			// Thread.sleep(2 * 1000);
 
 			String tFile_name = file_name.substring(0, file_name.indexOf("."));
-			String target_file = target_directory + "/"+tFile_name+"_"+bitrate+"."+target_type;
+			String target_file = target_directory + "/"+target_name;
 			target_file = target_file.replace("/", "\\");
 			// 윈도우가 아닐때 경로구분자를 바꿔준다.
 			AlteratConfig altConfig = AlteratConfigLoader.getInstance().getConfig();

@@ -221,7 +221,7 @@ class ThreadSourceFolderWatcher implements Runnable {
 //									
 										monitorDAO.beginBatch();
 
-										String j_id = monitorController.insertTcJob_2(monitorDAO.getSession(), source_file, source_path, targetDirectory, worker, bitrate, p_id);
+										String j_id = monitorController.insertTcJob_2(monitorDAO.getSession(), source_file, source_path, targetDirectory, worker, bitrate, p_id, nowDate);
 
 										
 //										if (j_id != null) {
